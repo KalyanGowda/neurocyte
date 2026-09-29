@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+@import 'tailwindcss';
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #07101a;
+  font-family: 'Inter', sans-serif;
+  color: #e8f2f8;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #5b8db844; border-radius: 2px; }
+
+/* --- Keyframes --- */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pulseRing {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  100% { transform: scale(2.4);  opacity: 0; }
+}
+@keyframes textReveal {
+  0%   { opacity: 0; letter-spacing: 0.7em; filter: blur(10px); }
+  55%  { opacity: 0.85; letter-spacing: 0.12em; filter: blur(2px); }
+  100% { opacity: 1; letter-spacing: 0.06em; filter: blur(0); }
+}
+@keyframes subtitleFade {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes buttonAppear {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes modalSlideIn {
+  from { opacity: 0; transform: scale(0.96) translateY(14px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes flowIn {
+  0%   { stroke-dashoffset: 200; opacity: 0; }
+  40%  { opacity: 0.7; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* --- Typography classes --- */
+.neuro-title {
+  font-family: 'Exo 2', sans-serif;
+  font-weight: 800;
+  animation: textReveal 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.neuro-subtitle {
+  font-family: 'Exo 2', sans-serif;
+  font-weight: 300;
+  animation: subtitleFade 1s ease forwards;
+}
+.btn-login { animation: buttonAppear 0.6s ease forwards; }
+.modal-enter { animation: modalSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* --- Input fields --- */
+.input-field {
+  background: #0c1a28;
+  border: 1px solid #1e3448;
+  color: #e8f2f8;
+  font-family: 'Inter', sans-serif;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-field:focus {
+  outline: none;
+  border-color: #5b8db8;
+  box-shadow: 0 0 0 2px #5b8db822;
+}
+.input-field::placeholder { color: #2e4a60; }
+.input-field option { background: #0c1a28; }
+
+.input-label {
+  color: #4a7090;
+  font-size: 11px;
+  font-family: 'Exo 2', sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* --- Tabs --- */
+.tab-active   { color: #5b8db8; border-bottom: 2px solid #5b8db8; }
+.tab-inactive { color: #3a5870; border-bottom: 2px solid transparent; }
+.tab-mint     { color: #7ecfb3 !important; border-bottom-color: #7ecfb3 !important; }
+
+/* --- Buttons --- */
+.glow-btn {
+  background: linear-gradient(135deg, #5b8db8, #3e6e94);
+  color: #e8f2f8;
+  font-family: 'Exo 2', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.glow-btn:hover {
+  box-shadow: 0 0 22px #5b8db855;
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #6fa3c4, #4a7fa8);
+}
+
+.admin-btn {
+  background: linear-gradient(135deg, #7ecfb3, #5ab89a);
+  color: #071814;
+  font-family: 'Exo 2', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.admin-btn:hover {
+  box-shadow: 0 0 22px #7ecfb355;
+  transform: translateY(-1px);
+}
+
+/* --- Scanlines --- */
+.scanline-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(91,141,184,0.015) 3px,
+    rgba(91,141,184,0.015) 4px
+  );
+  z-index: 2;
+}
+
+/* Dashboard */
+.app-shell{min-height:100vh;background:#f5f8fa;color:#1d3747;font-family:Inter,sans-serif}.topbar{height:70px;padding:0 34px;background:white;border-bottom:1px solid #e1eaee;display:flex;align-items:center;justify-content:space-between}.logo{font:700 16px 'Exo 2';letter-spacing:.1em;color:#34718e}.logo b{color:#40a67e}.secure{font-size:11px;color:#3d9a76;margin-right:19px}.signout,.section-title button{border:0;background:transparent;color:#377c9c;font:600 12px Inter;cursor:pointer}.workspace{display:grid;grid-template-columns:245px 1fr;min-height:calc(100vh - 70px)}aside{padding:26px 16px;background:#fff;border-right:1px solid #e1eaee;display:flex;flex-direction:column}.profile{display:flex;gap:10px;align-items:center;padding:0 10px 24px;border-bottom:1px solid #edf1f3}.profile i,.patient i,.staff i{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:#dceef4;color:#39708a;font:700 11px 'Exo 2';font-style:normal}.profile strong,.profile small{display:block}.profile strong{font-size:13px}.profile small{font-size:10px;color:#84969e;margin-top:3px}.nav-label{font:600 10px 'Exo 2';letter-spacing:.13em;text-transform:uppercase;color:#91a2aa;margin:27px 11px 8px}aside>button{border:0;background:transparent;padding:11px 12px;text-align:left;border-radius:7px;color:#687e89;font:500 13px Inter;cursor:pointer;margin:2px 0}aside>button i{display:inline-block;width:25px;font:600 18px 'Exo 2';font-style:normal}aside>button.active{background:#eaf5f9;color:#286d8b;font-weight:600}.network{margin:auto 12px 0;color:#6d9b89;font-size:10px}main{padding:43px clamp(25px,5vw,75px);max-width:1250px;width:100%}.heading{margin-bottom:32px}.heading p{margin:0 0 9px;color:#4b9abb;text-transform:uppercase;letter-spacing:.14em;font:700 10px 'Exo 2'}.heading h1{margin:0;font:700 clamp(27px,3vw,35px) 'Exo 2';color:#213e50}.heading span{display:block;margin-top:8px;color:#748a95;font-size:13px}.cards{display:grid;grid-template-columns:1fr 1fr;gap:17px;margin-bottom:42px}.cards button{border:1px solid #d7e5ea;border-radius:11px;background:#fff;padding:23px;display:flex;align-items:center;gap:15px;text-align:left;color:#478da9;font-size:22px;cursor:pointer;transition:.2s}.cards button:hover{transform:translateY(-2px);box-shadow:0 9px 21px #234b6214}.cards em{display:grid;place-items:center;width:39px;height:39px;border-radius:9px;background:#3e8dad;color:#fff;font-style:normal}.cards button:nth-child(2) em{background:#dceef4;color:#3c7b98}.cards div{flex:1}.cards strong,.cards span{display:block}.cards strong{font:700 15px 'Exo 2';color:#2b4757}.cards span{font-size:11px;color:#7a8f98;margin-top:5px}.section-title{display:flex;justify-content:space-between;align-items:end;margin:0 0 14px}.section-title h2,.patient-form h2{margin:0;font:700 18px 'Exo 2';color:#2a4657}.section-title p{margin:5px 0 0;color:#82949d;font-size:11px}.section-title>strong{color:#288565;background:#eaf8f1;border-radius:14px;padding:6px 9px;font-size:11px}.patients,.staff-list,.patient-form{background:#fff;border:1px solid #dfe9ed;border-radius:10px;overflow:hidden}.patient{display:grid;grid-template-columns:40px 1fr 170px 60px;gap:12px;align-items:center;padding:15px 18px;border-bottom:1px solid #edf2f4}.patient:last-child{border:0}.patient strong,.patient span,.staff strong,.staff span{display:block}.patient strong,.staff strong{font-size:13px;color:#2a4657}.patient span,.patient small,.staff span,.staff small{font-size:11px;color:#80939c;margin-top:4px}.patient em{background:#e9f8ef;color:#278b68;border-radius:13px;padding:5px 7px;text-align:center;font-size:10px;font-style:normal}.patient-form{max-width:900px;padding:0 28px}.patient-form section{padding:25px 0;border-bottom:1px solid #e8eef1}.patient-form h2{display:flex;align-items:center;gap:8px;font-size:16px;margin-bottom:18px}.patient-form h2 i{font:700 10px 'Exo 2';color:#4c9bbb;background:#eaf5f9;padding:5px;border-radius:4px;font-style:normal}.patient-form h2 small{font:400 10px Inter;color:#84969e;border:1px solid #dce7eb;padding:3px 6px;border-radius:10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.patient-form label{display:flex;flex-direction:column;gap:7px;color:#5c7580;font-size:11px;font-weight:600}.patient-form label b{color:#db6c6c}.patient-form input,.patient-form select,.search input{border:1px solid #d8e5ea;border-radius:6px;padding:10px;color:#284656;font:13px Inter;outline:0}.patient-form input:focus,.search input:focus{border-color:#55a0bb}.wide{grid-column:span 2}.upload{border:1px dashed #b9cfd8;background:#f9fcfd;border-radius:7px;padding:16px;cursor:pointer}.upload input{display:none}.upload strong{color:#3d6474;font-size:12px}.upload small{color:#8498a1;font-size:10px;font-weight:400}.patient-form footer{padding:20px 0;display:flex;justify-content:space-between;align-items:center;color:#889aa2;font-size:10px}.patient-form footer button,.staff button{border:0;border-radius:6px;background:#3989a8;color:#fff;padding:11px 15px;font:700 12px 'Exo 2';cursor:pointer}.ok,.warning{font-size:11px;padding:9px;border-radius:5px}.ok{background:#eaf8f1;color:#298465}.warning{background:#fff1f1;color:#b85d5d}.search{max-width:720px;display:flex;align-items:center;gap:10px;border:1px solid #dce7eb;background:#fff;border-radius:8px;padding:0 14px}.search span{font-size:20px;color:#5796ae}.search input{border:0;width:100%}.results{font-size:11px;color:#82949d;margin:20px 0 10px}.admin-note{padding:13px 15px;border:1px solid #c6ead9;background:#effaf4;border-radius:8px;color:#3a775f;font-size:12px;margin-bottom:30px}.staff{display:grid;grid-template-columns:40px 1.2fr 1fr auto;gap:14px;align-items:center;padding:16px 18px;border-bottom:1px solid #edf2f4}.staff i{background:#e8f6ef;color:#318163}.staff button{background:#41a880;font-size:11px;padding:9px 12px}.empty{padding:32px;text-align:center;color:#82949d;font-size:12px}
+/* Authentication */
+.modal-bg{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#07101ad9;backdrop-filter:blur(10px)}.auth-modal{width:min(405px,calc(100vw - 30px));overflow:hidden;border-radius:14px;background:#fff;box-shadow:0 24px 65px #0009;border-top:3px solid #4a9ab8}.auth-modal header{padding:21px 25px 16px;display:flex;justify-content:space-between}.auth-modal header b{display:block;color:#35647d;font:700 14px 'Exo 2';letter-spacing:.1em}.auth-modal header b:first-letter{color:#43a77f}.auth-modal header small{color:#8398a1;font-size:10px}.auth-modal header button{border:0;border-radius:50%;background:#edf3f5;color:#607985;width:27px;height:27px;font-size:18px;cursor:pointer}.auth-modal nav{display:grid;grid-template-columns:1fr 1fr 1fr;padding:0 17px;border-bottom:1px solid #e4ecef}.auth-modal nav button{border:0;border-bottom:2px solid transparent;background:transparent;padding:10px 4px;color:#8398a1;text-transform:uppercase;font:600 10px 'Exo 2';cursor:pointer}.auth-modal nav .selected{color:#367d9b;border-color:#438fad}.auth-content{padding:24px 26px 27px}.auth-content h2{margin:0;color:#2b4859;font:700 21px 'Exo 2'}.auth-content>form>p{margin:6px 0 18px;color:#79909a;font-size:11px}.auth-input{display:flex;flex-direction:column;gap:6px;margin:13px 0}.auth-input span{font:600 10px 'Exo 2';letter-spacing:.06em;text-transform:uppercase;color:#607983}.auth-input input{border:1px solid #d7e3e8;border-radius:6px;padding:10px;color:#294556;font:13px Inter;outline:0}.auth-content form>button{width:100%;margin-top:10px;padding:11px;border:0;border-radius:6px;background:#3c89a8;color:#fff;font:700 12px 'Exo 2';cursor:pointer}.auth-content .admin-button{background:#3fa17c}.auth-message{background:#fff1f1;color:#b95f5f;padding:8px;border-radius:5px;font-size:10px;line-height:1.4}.switch{display:block;margin-top:15px;text-align:center;color:#8498a1;font-size:11px}.switch a{color:#38809f;cursor:pointer;font-weight:600}.admin-chip{display:inline-block;margin-bottom:13px;padding:6px 8px;background:#ebfaf3;color:#358c69;border-radius:5px;font:700 9px 'Exo 2';letter-spacing:.07em;text-transform:uppercase;font-style:normal}
+@media(max-width:700px){.topbar{padding:0 18px}.secure{display:none}.workspace{grid-template-columns:1fr}aside{padding:10px 16px;display:block}.profile,.nav-label,.network{display:none}aside>button{width:auto;margin-right:5px}main{padding:29px 18px}.cards,.grid{grid-template-columns:1fr}.wide{grid-column:auto}.patient-form{padding:0 18px}.patient{grid-template-columns:38px 1fr 55px}.patient small{display:none}.staff{grid-template-columns:38px 1fr auto}.staff>small{display:none}}
+
+/* Patient details and payment-state controls */
+.patient{width:100%;border-left:0;border-right:0;border-top:0;background:#fff;text-align:left;cursor:pointer}.patient:hover{background:#f7fbfc}.patient em{background:#fff3df;color:#a46c1f}.patient em.paid{background:#e9f8ef;color:#278b68}.back{border:0;background:transparent;padding:0;margin-bottom:20px;color:#3d83a1;font:600 12px Inter;cursor:pointer}.detail-hero{display:flex;align-items:center;gap:15px;background:#fff;border:1px solid #dfe9ed;border-radius:11px;padding:22px;margin-bottom:18px}.detail-avatar{width:55px;height:55px;border-radius:50%;display:grid;place-items:center;background:#dcedf4;color:#39718c;font:700 17px 'Exo 2'}.detail-hero p{margin:0 0 4px;font:600 10px 'Exo 2';letter-spacing:.08em;text-transform:uppercase;color:#5799b4}.detail-hero h1{margin:0;font:700 25px 'Exo 2';color:#274555}.detail-hero span{font-size:12px;color:#7d929b}.payment-badge{margin-left:auto;border-radius:16px;padding:8px 11px;background:#fff3df;color:#a46c1f;font-size:11px;font-weight:700}.payment-badge.paid{background:#e9f8ef;color:#278b68}.detail-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}.detail-card{background:#fff;border:1px solid #dfe9ed;border-radius:10px;padding:20px}.detail-card h2{margin:0 0 17px;font:700 17px 'Exo 2';color:#294757}.data{padding:11px 0;border-bottom:1px solid #edf2f4}.data span,.data strong{display:block}.data span{color:#83969f;text-transform:uppercase;font:600 9px 'Exo 2';letter-spacing:.08em}.data strong{margin-top:5px;color:#365463;font-size:12px;line-height:1.4}.payment-title{margin-top:21px!important}.status-control{display:flex;flex-direction:column;gap:6px;margin-top:14px;color:#69818b;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}.status-control select{border:1px solid #d8e5ea;border-radius:6px;padding:10px;color:#284656;font:12px Inter;background:#fff}.report-card>p{font-size:11px;color:#7c9099;line-height:1.5}.report-file,.no-report{padding:10px;background:#edf8f4;color:#318365;border-radius:6px;font-size:11px;margin:15px 0}.no-report{background:#f7fafb;color:#84979f}.report-upload{margin-top:12px}
+@media(max-width:850px){.detail-grid{grid-template-columns:1fr}.detail-hero{align-items:flex-start}.payment-badge{margin-left:auto}}@media(max-width:500px){.detail-hero{flex-wrap:wrap}.payment-badge{margin-left:0}.patient span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
