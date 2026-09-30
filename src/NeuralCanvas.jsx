@@ -1,27 +1,5 @@
 import { useEffect, useRef } from 'react';
 
-interface Node {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  radius: number;
-  pulsePhase: number;
-  brightness: number;
-  color: string;
-}
-
-interface Pulse {
-  fromNode: number;
-  toNode: number;
-  progress: number;
-  speed: number;
-  color: string;
-  trail: { x: number; y: number }[];
-}
-
-interface Props { phase: 'animating' | 'done'; }
-
 // Steel blue / soft mint / cool white palette
 const NODE_COLORS = [
   '#5b8db8', '#5b8db8', '#5b8db8',
@@ -30,14 +8,14 @@ const NODE_COLORS = [
 ];
 const PULSE_COLORS = ['#7ecfb3', '#5b8db8', '#a0ddc8', '#c8e8f4', '#7ecfb3'];
 
-export default function NeuralCanvas({ phase }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef<number>(0);
+export default function NeuralCanvas({ phase }) {
+  const canvasRef = useRef(null);
+  const frameRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = canvas.getContext('2d');
 
     const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
     resize();
@@ -46,7 +24,7 @@ export default function NeuralCanvas({ phase }: Props) {
     const NODE_COUNT = 60;
     const MAX_DIST = 175;
 
-    const nodes: Node[] = Array.from({ length: NODE_COUNT }, () => ({
+    const nodes = Array.from({ length: NODE_COUNT }, () => ({
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
       vx: (Math.random() - 0.5) * 0.3,
@@ -57,16 +35,16 @@ export default function NeuralCanvas({ phase }: Props) {
       color: NODE_COLORS[Math.floor(Math.random() * NODE_COLORS.length)],
     }));
 
-    const pulses: Pulse[] = [];
+    const pulses = [];
     let lastPulse = 0;
 
-    const spawnPulse = (t: number) => {
+    const spawnPulse = (t) => {
       if (t - lastPulse < 140) return;
       lastPulse = t;
       const batchCount = Math.random() < 0.25 ? 2 : 1;
       for (let b = 0; b < batchCount; b++) {
         const from = Math.floor(Math.random() * NODE_COUNT);
-        const candidates: number[] = [];
+        const candidates = [];
         for (let i = 0; i < NODE_COUNT; i++) {
           if (i === from) continue;
           const dx = nodes[i].x - nodes[from].x;
@@ -81,7 +59,7 @@ export default function NeuralCanvas({ phase }: Props) {
       if (pulses.length > 28) pulses.splice(0, pulses.length - 28);
     };
 
-    const draw = (t: number) => {
+    const draw = (t) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       for (const n of nodes) {

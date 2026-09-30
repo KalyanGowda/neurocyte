@@ -1,19 +1,17 @@
 import { useState, useEffect } from 'react';
 import NeuralCanvas from './NeuralCanvas';
 import LoginModal from './LoginModal';
-import Dashboard, { type StaffMember } from './Dashboard';
-
-type AnimPhase = 'neural' | 'done';
+import Dashboard from './Dashboard';
 
 export default function App() {
-  const [animPhase, setAnimPhase]         = useState<AnimPhase>('neural');
+  const [animPhase, setAnimPhase]         = useState('neural');
   const [showLogin, setShowLogin]         = useState(false);
   const [titleVisible, setTitleVisible]   = useState(false);
   const [subtitleVisible, setSubtitleVisible] = useState(false);
   const [taglineVisible, setTaglineVisible]   = useState(false);
   const [btnVisible, setBtnVisible]       = useState(false);
-  const [view, setView] = useState<'landing' | 'staff' | 'admin'>('landing');
-  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [view, setView] = useState('landing');
+  const [staff, setStaff] = useState([]);
 
   useEffect(() => {
     // Neural flow runs freely for 3.4s — no NEUROCYTE visible yet
@@ -200,7 +198,7 @@ export default function App() {
   );
 }
 
-function NeuroCyteLogo({ size = 26 }: { size?: number }) {
+function NeuroCyteLogo({ size = 26 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
       <circle cx="16" cy="16" r="4"   fill="#5b8db8" opacity="0.95"/>
