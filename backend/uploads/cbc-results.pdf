@@ -1,0 +1,82 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1568 >>
+stream
+
+BT
+/F1 20 Tf
+50 740 Td
+(NEUROCYTE CLINICAL LABORATORY SERVICES) Tj
+/F1 10 Tf
+0 -22 Td
+(Accredited Diagnostic & Hematology Center | Reg: NC-MED-9942) Tj
+0 -15 Td
+(Date: 30 Sep 2026 | Ref: LAB-882914) Tj
+0 -25 Td
+/F1 14 Tf
+(PATIENT CLINICAL REPORT: Complete Blood Count (CBC)) Tj
+/F1 11 Tf
+0 -20 Td
+(Patient Name: Maya Patel    ID: PT-2048) Tj
+0 -16 Td
+(Specimen: Whole Blood EDTA    Doctor: Dr. Maya Lin) Tj
+0 -25 Td
+/F1 12 Tf
+(Test Parameter                     Result          Reference Range     Status) Tj
+0 -18 Td
+/F1 10 Tf
+(Hemoglobin (Hb)                    13.8 g/dL       12.0 - 15.5 g/dL    Normal) Tj
+0 -16 Td
+(Total Leukocyte Count (WBC)        6,400 /mcL      4,500 - 11,000 /mcL Normal) Tj
+0 -16 Td
+(Platelet Count                     240,000 /mcL    150,000 - 450,000   Normal) Tj
+0 -16 Td
+(RBC Count                          4.62 mil/mcL    4.20 - 5.40 mil/mcL Normal) Tj
+0 -16 Td
+(Hematocrit (PCV)                   41.2 %          37.0 - 48.0 %       Normal) Tj
+0 -16 Td
+(Mean Corpuscular Volume (MCV)      88.4 fL         80.0 - 100.0 fL     Normal) Tj
+0 -16 Td
+(Erythrocyte Sed. Rate (ESR)        12 mm/hr        0 - 20 mm/hr        Normal) Tj
+0 -25 Td
+/F1 11 Tf
+(CLINICAL INTERPRETATION:) Tj
+0 -16 Td
+/F1 10 Tf
+(All complete blood count parameters are within physiological reference intervals.) Tj
+0 -14 Td
+(No abnormal morphological variants or dysplastic cellular features detected.) Tj
+0 -30 Td
+/F1 10 Tf
+(Verified by: Dr. Sarah Jenkins, MD Pathologist) Tj
+0 -15 Td
+(Electronically signed at Neurocyte Diagnostics Lab - Validated Record) Tj
+ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000300 + 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1868
+%%EOF
