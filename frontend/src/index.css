@@ -165,3 +165,6 @@ html, body, #root {
 
 /* Find Patient: clinical report fills the complete lower row. */
 .record-actions{grid-template-columns:minmax(0,1fr)!important}.record-actions .report-card{width:100%}
+.report-link{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#287795;text-decoration:none}.report-link:hover{color:#17566f}
+
+.history-row{width:100%;border:0;background:#fff;text-align:left;cursor:pointer}.history-row:hover,.history-row.selected{background:#f3fafc}.history-edit-hint{grid-column:1/-1;justify-self:end;color:#3a88a7!important}.visit-payment-card form>.cancel-edit{background:#edf5f7;color:#3b7184}.report-link{text-decoration:none!important}.report-link:hover{text-decoration:none!important}

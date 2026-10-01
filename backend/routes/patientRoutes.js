@@ -30,6 +30,7 @@ const PATIENT_SELECT_SQL = `
       (
         SELECT json_agg(
           json_build_object(
+            'recordId', pt.id,
             'id', pt.transaction_id,
             'date', pt.payment_date,
             'method', pt.method,

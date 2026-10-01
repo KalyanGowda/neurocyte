@@ -19,4 +19,5 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+backend/uploads/
 .pdf
