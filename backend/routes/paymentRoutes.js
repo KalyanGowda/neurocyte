@@ -28,6 +28,7 @@ const PATIENT_SELECT_SQL = `
       (
         SELECT json_agg(
           json_build_object(
+            'recordId', pt.id,
             'id', pt.transaction_id,
             'date', pt.payment_date,
             'method', pt.method,
@@ -120,7 +121,7 @@ router.get("/:id/payments", authenticate, async (req, res) => {
   try {
     const { id: patientId } = req.params
     const result = await query(
-      `SELECT transaction_id AS id, payment_date AS date, method, status, note
+      `SELECT id AS "recordId", transaction_id AS id, payment_date AS date, method, status, note
        FROM payment_transactions
        WHERE patient_id = $1
        ORDER BY created_at DESC`,
@@ -132,25 +133,40 @@ router.get("/:id/payments", authenticate, async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve payment history." })
   }
 })
-// PATCH /api/patients/:id/payments/:transactionId/status (Change transaction e.g. Pending -> Paid)
-router.patch("/:id/payments/:transactionId/status", authenticate, async (req, res) => {
+// PATCH /api/patients/:id/payments/:transactionRecordId/status
+router.patch(
+  "/:id/payments/:transactionRecordId/status",
+  authenticate,
+  async (req, res) => {
   try {
-    const { id: patientId, transactionId } = req.params
-    const { status } = req.body
+    const { id: patientId, transactionRecordId } = req.params
+    const { method, status, id: transactionId, note = "" } = req.body
 
     if (!status || !["Paid", "Pending"].includes(status)) {
       return res.status(400).json({
         error: "Valid status ('Paid' or 'Pending') is required.",
       })
     }
+    if (!method || !transactionId?.trim()) {
+      return res.status(400).json({
+        error: "Payment method and transaction ID are required.",
+      })
+    }
 
-    // 1. Update the transaction record
+    // 1. Update the selected transaction record.
     const updateTxRes = await query(
       `UPDATE payment_transactions
-       SET status = $1
-       WHERE patient_id = $2 AND transaction_id = $3
+       SET method = $1, status = $2, transaction_id = $3, note = $4
+       WHERE patient_id = $5 AND id = $6
        RETURNING *`,
-      [status, patientId, transactionId],
+      [
+        method,
+        status,
+        transactionId.trim(),
+        note.trim(),
+        patientId,
+        transactionRecordId,
+      ],
     )
 
     if (updateTxRes.rows.length === 0) {
@@ -159,9 +175,9 @@ router.patch("/:id/payments/:transactionId/status", authenticate, async (req, re
       })
     }
 
-    // 2. Synchronize patient.payment_status with the latest transaction
+    // 2. Synchronize the patient's summary with its latest transaction.
     const latestTxRes = await query(
-      `SELECT status, transaction_id
+      `SELECT status, method, transaction_id
        FROM payment_transactions
        WHERE patient_id = $1
        ORDER BY created_at DESC
@@ -173,9 +189,9 @@ router.patch("/:id/payments/:transactionId/status", authenticate, async (req, re
       const latestTx = latestTxRes.rows[0]
       await query(
         `UPDATE patients
-         SET payment_status = $1, transaction_id = $2, updated_at = NOW()
-         WHERE id = $3`,
-        [latestTx.status, latestTx.transaction_id, patientId],
+         SET payment_status = $1, payment_method = $2, transaction_id = $3, updated_at = NOW()
+         WHERE id = $4`,
+        [latestTx.status, latestTx.method, latestTx.transaction_id, patientId],
       )
     }
 
@@ -184,13 +200,14 @@ router.patch("/:id/payments/:transactionId/status", authenticate, async (req, re
       patientId,
     ])
     res.json({
-      message: `Transaction ${transactionId} status updated to ${status}.`,
+      message: `Transaction ${transactionId.trim()} updated successfully.`,
       patient: updatedRes.rows[0],
     })
   } catch (err) {
     console.error("Update transaction status error:", err)
     res.status(500).json({ error: "Failed to update transaction status." })
   }
-})
+  },
+)
 
 export default router;

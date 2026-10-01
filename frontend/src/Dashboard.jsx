@@ -469,6 +469,7 @@ function Search({ query, setQuery, patients, loading, onSelect }) {
 function Payments({ patients, onUpdate }) {
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(null)
+  const [selectedTransaction, setSelectedTransaction] = useState(null)
   const [transaction, setTransaction] = useState({
     method: "Card",
     status: "Paid",
@@ -484,7 +485,7 @@ function Payments({ patients, onUpdate }) {
       .includes(query.toLowerCase()),
   )
 
-  const addTransaction = async (event) => {
+  const saveTransaction = async (event) => {
     event.preventDefault()
     if (!transaction.id.trim()) {
       return setNotice(
@@ -494,16 +495,44 @@ function Payments({ patients, onUpdate }) {
     setSubmitting(true)
     setNotice("")
     try {
-      const res = await paymentApi.addPayment(selected.id, transaction)
+      const res = selectedTransaction
+        ? await paymentApi.updateTransaction(
+            selected.id,
+            selectedTransaction.recordId,
+            transaction,
+          )
+        : await paymentApi.addPayment(selected.id, transaction)
       onUpdate(res.patient)
       setSelected(res.patient)
+      setSelectedTransaction(null)
       setTransaction({ method: "Card", status: "Paid", id: "", note: "" })
-      setNotice("Visit payment added to this patient’s transaction history.")
+      setNotice(
+        selectedTransaction
+          ? "Transaction updated successfully."
+          : "Visit payment added successfully.",
+      )
     } catch (err) {
       setNotice(err.message || "Failed to record visit payment.")
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const editTransaction = (item) => {
+    setSelectedTransaction(item)
+    setTransaction({
+      method: item.method || "Card",
+      status: item.status || "Pending",
+      id: item.id || "",
+      note: item.note || "",
+    })
+    setNotice("")
+  }
+
+  const cancelEdit = () => {
+    setSelectedTransaction(null)
+    setTransaction({ method: "Card", status: "Paid", id: "", note: "" })
+    setNotice("")
   }
 
   return (
@@ -529,6 +558,13 @@ function Payments({ patients, onUpdate }) {
               key={patient.id}
               onClick={() => {
                 setSelected(patient)
+                setSelectedTransaction(null)
+                setTransaction({
+                  method: "Card",
+                  status: "Paid",
+                  id: "",
+                  note: "",
+                })
                 setNotice("")
               }}
             >
@@ -563,6 +599,13 @@ function Payments({ patients, onUpdate }) {
             className="back"
             onClick={() => {
               setSelected(null)
+              setSelectedTransaction(null)
+              setTransaction({
+                method: "Card",
+                status: "Paid",
+                id: "",
+                note: "",
+              })
               setNotice("")
             }}
           >
@@ -599,7 +642,16 @@ function Payments({ patients, onUpdate }) {
               </div>
               <div className="history-table">
                 {(selected.paymentHistory || []).map((item, idx) => (
-                  <div className="history-row" key={`${item.id}-${idx}`}>
+                  <button
+                    type="button"
+                    className={`history-row ${
+                      selectedTransaction?.recordId === item.recordId
+                        ? "selected"
+                        : ""
+                    }`}
+                    key={`${item.recordId || item.id}-${idx}`}
+                    onClick={() => editTransaction(item)}
+                  >
                     <div>
                       <strong>{item.id}</strong>
                       <span>{item.note || "Patient visit"}</span>
@@ -609,7 +661,8 @@ function Payments({ patients, onUpdate }) {
                     <em className={(item.status || "paid").toLowerCase()}>
                       {item.status}
                     </em>
-                  </div>
+                    <small className="history-edit-hint">Select to edit</small>
+                  </button>
                 ))}
                 {!(selected.paymentHistory || []).length && (
                   <div className="empty">No payments logged yet.</div>
@@ -620,11 +673,19 @@ function Payments({ patients, onUpdate }) {
             <section className="visit-payment-card">
               <div className="card-heading">
                 <div>
-                  <h2>Add visit payment</h2>
-                  <p>Update the transaction after each patient visit.</p>
+                  <h2>
+                    {selectedTransaction
+                      ? "Edit visit payment"
+                      : "Add visit payment"}
+                  </h2>
+                  <p>
+                    {selectedTransaction
+                      ? "Change the selected transaction details, then save your changes."
+                      : "Record a new transaction for this patient visit."}
+                  </p>
                 </div>
               </div>
-              <form onSubmit={addTransaction}>
+              <form onSubmit={saveTransaction}>
                 <label>
                   Payment method
                   <select
@@ -673,12 +734,32 @@ function Payments({ patients, onUpdate }) {
                   />
                 </label>
                 {notice && (
-                  <p className={notice.includes("added") ? "ok" : "warning"}>
+                  <p
+                    className={
+                      notice.includes("successfully") ||
+                      notice.includes("added")
+                        ? "ok"
+                        : "warning"
+                    }
+                  >
                     {notice}
                   </p>
                 )}
+                {selectedTransaction && (
+                  <button
+                    type="button"
+                    className="cancel-edit"
+                    onClick={cancelEdit}
+                  >
+                    Cancel editing
+                  </button>
+                )}
                 <button disabled={submitting}>
-                  {submitting ? "Recording payment..." : "Add transaction →"}
+                  {submitting
+                    ? "Saving transaction..."
+                    : selectedTransaction
+                      ? "Save changes"
+                      : "Add transaction"}
                 </button>
               </form>
             </section>
@@ -1050,8 +1131,19 @@ function PatientDetails({ patient, onBack, onUpdate }) {
           </div>
           {patient.report ? (
             <div className="report-file">
-              ▣ <span>{patient.report}</span>
-              <small>Attached</small>
+              {patient.reportUrl ? (
+                <a
+                  href={patient.reportUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="report-link"
+                >
+                  {patient.report}
+                </a>
+              ) : (
+                <span>{patient.report}</span>
+              )}
+              <small>Open attachment</small>
             </div>
           ) : (
             <div className="no-report">

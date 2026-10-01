@@ -149,6 +149,15 @@ export const paymentApi = {
       body: JSON.stringify(paymentData),
     }),
 
+  updateTransaction: (patientId, transactionRecordId, transaction) =>
+    apiRequest(
+      `/patients/${patientId}/payments/${transactionRecordId}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(transaction),
+      },
+    ),
+
   getPaymentHistory: (patientId) =>
     apiRequest(`/patients/${patientId}/payments`),
 }
