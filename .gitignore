@@ -20,4 +20,5 @@ logs/
 /.plugins/
 /.opencode-skills/
 backend/uploads/
-.pdf
+*.pdf
+.pnpm-store/
