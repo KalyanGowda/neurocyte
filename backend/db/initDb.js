@@ -168,6 +168,51 @@ export async function initDatabase() {
 
       console.log("✓ Seeded initial patient clinical and transaction records.")
     }
+
+    // Ensure all existing patient records have a valid, unique Patient ID
+    const unassignedPatients = await query(
+      "SELECT ctid, id, name FROM patients WHERE id IS NULL OR id = '' OR id NOT LIKE 'PT-%'",
+    )
+    if (unassignedPatients.rows.length > 0) {
+      for (const row of unassignedPatients.rows) {
+        const maxRes = await query(`
+          SELECT COALESCE(
+            MAX(CASE WHEN id ~ '^PT-[0-9]+$' THEN SUBSTRING(id FROM 4)::BIGINT ELSE NULL END),
+            2048
+          ) AS max_id FROM patients
+        `)
+        const nextNum = (parseInt(maxRes.rows[0].max_id, 10) || 2048) + 1
+        const newId = `PT-${nextNum}`
+        await query("UPDATE patients SET id = $1 WHERE ctid = $2", [
+          newId,
+          row.ctid,
+        ])
+        console.log(
+          `✓ Added unique Patient ID ${newId} for existing patient: ${row.name}`,
+        )
+      }
+    }
+
+    // Keep sequence synchronized with highest existing patient ID
+    try {
+      await query(`
+        SELECT setval(
+          'patient_id_seq',
+          GREATEST(
+            COALESCE(
+              (SELECT MAX(NULLIF(regexp_replace(id, '^PT-', ''), '')::BIGINT) 
+               FROM patients 
+               WHERE id ~ '^PT-[0-9]+$'),
+              2048
+            ),
+            2048
+          ),
+          true
+        )
+      `)
+    } catch (seqErr) {
+      console.warn("Sequence synchronization warning:", seqErr.message)
+    }
   } catch (error) {
     console.error("Database initialization failed:", error)
     throw error

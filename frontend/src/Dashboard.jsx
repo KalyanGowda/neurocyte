@@ -20,6 +20,20 @@ const blank = () => ({
   paymentHistory: [],
 })
 
+export function getNextPatientId(patientList = []) {
+  let maxNum = 2048
+  for (const p of patientList) {
+    if (p && p.id) {
+      const match = String(p.id).match(/^PT-(\d+)$/i)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (num > maxNum) maxNum = num
+      }
+    }
+  }
+  return `PT-${maxNum + 1}`
+}
+
 export default function Dashboard({ mode, user, onLogout }) {
   const [page, setPage] = useState("home")
   const [patients, setPatients] = useState([])
@@ -28,8 +42,27 @@ export default function Dashboard({ mode, user, onLogout }) {
   const [notice, setNotice] = useState("")
   const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [nextPatientId, setNextPatientId] = useState("PT-2049")
 
   const admin = mode === "admin" || user?.is_admin
+
+  // Calculate next auto-incremented, non-repeating Patient ID from current records
+  const computedNextId = useMemo(() => {
+    return getNextPatientId(patients)
+  }, [patients])
+
+  const refreshNextId = async () => {
+    try {
+      const res = await patientApi.getNextId()
+      if (res && res.nextId) {
+        setNextPatientId(res.nextId)
+        return
+      }
+    } catch {
+      // Fall back to computed next ID
+    }
+    setNextPatientId(computedNextId)
+  }
 
   // Load patients from PostgreSQL backend
   const loadPatients = async (searchQuery = "") => {
@@ -50,12 +83,34 @@ export default function Dashboard({ mode, user, onLogout }) {
     }
   }, [admin])
 
+  useEffect(() => {
+    setNextPatientId(computedNextId)
+  }, [computedNextId])
+
+  // Search through patient name and patient ID
   const results = useMemo(() => {
     if (!query.trim()) return patients
-    const q = query.toLowerCase()
-    return patients.filter((p) =>
-      `${p.name} ${p.id} ${p.contact} ${p.disease}`.toLowerCase().includes(q),
-    )
+    const q = query.trim().toLowerCase()
+    const qClean = q.replace(/[^a-z0-9]/gi, "")
+    const qNumeric = q.replace(/[^0-9]/g, "")
+
+    return patients.filter((p) => {
+      const name = (p.name || "").toLowerCase()
+      const id = (p.id || "").toLowerCase()
+      const idClean = id.replace(/[^a-z0-9]/gi, "")
+      const idNumeric = id.replace(/[^0-9]/g, "")
+
+      // Search through patient name
+      const nameMatches = name.includes(q)
+
+      // Search through patient ID (exact prefix, normalized, or numeric code)
+      const idMatches =
+        id.includes(q) ||
+        (qClean.length > 0 && idClean.includes(qClean)) ||
+        (qNumeric.length > 0 && idNumeric.includes(qNumeric))
+
+      return nameMatches || idMatches
+    })
   }, [patients, query])
 
   const save = async (e) => {
@@ -110,8 +165,9 @@ export default function Dashboard({ mode, user, onLogout }) {
       setPatients((current) => [newPatient, ...current])
       setForm(blank())
       setNotice(
-        `${newPatient.name} was added successfully (ID: ${newPatient.id}).`,
+        `${newPatient.name} was added successfully with Patient ID ${newPatient.id}.`,
       )
+      refreshNextId()
     } catch (err) {
       setNotice(err.message || "Failed to save patient record.")
     }
@@ -179,6 +235,7 @@ export default function Dashboard({ mode, user, onLogout }) {
                 onClick={() => {
                   setPage("new")
                   setNotice("")
+                  refreshNextId()
                 }}
               />
               <Nav
@@ -213,6 +270,7 @@ export default function Dashboard({ mode, user, onLogout }) {
               setForm={setForm}
               notice={notice}
               save={save}
+              nextId={nextPatientId || computedNextId}
             />
           ) : page === "search" ? (
             <Search
@@ -269,6 +327,11 @@ export default function Dashboard({ mode, user, onLogout }) {
                 setSelected(p)
                 setPage("details")
               }}
+              onRegisterClick={() => {
+                setPage("new")
+                setNotice("")
+                refreshNextId()
+              }}
             />
           )}
         </main>
@@ -277,7 +340,7 @@ export default function Dashboard({ mode, user, onLogout }) {
   )
 }
 
-function Home({ patients, go, user, onSelectPatient }) {
+function Home({ patients, go, user, onSelectPatient, onRegisterClick }) {
   const firstName = user?.name ? user.name.split(" ")[0] : "Jordan"
   return (
     <>
@@ -287,7 +350,7 @@ function Home({ patients, go, user, onSelectPatient }) {
         text="Manage patient records and intake from one secure workspace."
       />
       <div className="cards">
-        <button onClick={() => go("new")}>
+        <button onClick={onRegisterClick || (() => go("new"))}>
           <em>+</em>
           <div>
             <strong>Register new patient</strong>
@@ -298,8 +361,8 @@ function Home({ patients, go, user, onSelectPatient }) {
         <button onClick={() => go("search")}>
           <em>⌕</em>
           <div>
-            <strong>Find existing patient</strong>
-            <span>Search by name, patient ID, or phone number.</span>
+            <strong>Find patient</strong>
+            <span>Search records by patient name or unique patient ID.</span>
           </div>
           →
         </button>
@@ -316,7 +379,7 @@ function Home({ patients, go, user, onSelectPatient }) {
   )
 }
 
-function NewPatient({ form, setForm, notice, save }) {
+function NewPatient({ form, setForm, notice, save, nextId }) {
   const input = (key, label, optional = false, type = "text") => (
     <label>
       <span>
@@ -340,7 +403,22 @@ function NewPatient({ form, setForm, notice, save }) {
         text="Fields marked with * are required to create a patient record."
       />
       <form className="patient-form" onSubmit={save}>
-        <Block n="01" title="Personal details">
+        <Block n="01" title="Patient ID & System Identification">
+          <div className="patient-id-block">
+            <div className="patient-id-display-block">
+              <div className="patient-id-badge-hero">
+                <span className="id-icon">PT</span>
+                <strong className="id-code">{nextId}</strong>
+              </div>
+              <div className="patient-id-meta-text">
+                <span className="patient-id-status-badge">
+                </span>
+              </div>
+            </div>
+          </div>
+        </Block>
+
+        <Block n="02" title="Personal details">
           <div className="grid">
             {input("name", "Full name")}
             {input("age", "Age", false, "number")}
@@ -360,14 +438,14 @@ function NewPatient({ form, setForm, notice, save }) {
           </div>
         </Block>
 
-        <Block n="02" title="Emergency contact">
+        <Block n="03" title="Emergency contact">
           <div className="grid">
             {input("emergencyName", "Contact name")}
             {input("emergencyContact", "Contact number")}
           </div>
         </Block>
 
-        <Block n="03" title="Payment transaction">
+        <Block n="04" title="Payment transaction">
           <div className="grid">
             <label>
               <span>
@@ -401,7 +479,7 @@ function NewPatient({ form, setForm, notice, save }) {
           </div>
         </Block>
 
-        <Block n="04" title="Clinical reports" optional>
+        <Block n="05" title="Clinical reports" optional>
           <label className="upload">
             <input
               type="file"
@@ -446,8 +524,8 @@ function Search({ query, setQuery, patients, loading, onSelect }) {
     <>
       <Heading
         eyebrow="Patient records"
-        title="Find existing patient"
-        text="Select a patient to view their record, payment status, and reports."
+        title="Find patient"
+        text="Search through patient name and unique patient ID to view records, payment status, and reports."
       />
       <div className="search">
         <span>⌕</span>
@@ -455,12 +533,33 @@ function Search({ query, setQuery, patients, loading, onSelect }) {
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search patients by name, ID, or phone number..."
+          placeholder="Search by patient name or patient ID (e.g. Maya Patel, PT-2048)..."
         />
+        {query && (
+          <button
+            type="button"
+            className="clear-search-btn"
+            onClick={() => setQuery("")}
+            title="Clear search"
+          >
+            ×
+          </button>
+        )}
       </div>
-      <p className="results">
-        {loading ? "Searching database..." : `${patients.length} records found`}
-      </p>
+      <div className="search-meta">
+        <p className="results">
+          {loading
+            ? "Searching database..."
+            : query.trim()
+              ? `${patients.length} record${
+                  patients.length === 1 ? "" : "s"
+                } matching "${query.trim()}" by name or ID`
+              : `${patients.length} patient records available`}
+        </p>
+        {query.trim() && (
+          <span className="search-filter-tag">Searching Name & Patient ID</span>
+        )}
+      </div>
       <Patients patients={patients} onSelect={onSelect} />
     </>
   )
@@ -576,10 +675,15 @@ function Payments({ patients, onUpdate }) {
                   .join("")}
               </i>
               <div>
-                <strong>{patient.name}</strong>
-                <span>
-                  {patient.id} · {patient.contact}
-                </span>
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                >
+                  <strong>{patient.name}</strong>
+                  <span className="patient-id-pill" title="Unique Patient ID">
+                    {patient.id}
+                  </span>
+                </div>
+                <span>{patient.contact}</span>
               </div>
               <em
                 className={(patient.paymentStatus || "pending").toLowerCase()}
@@ -620,7 +724,18 @@ function Payments({ patients, onUpdate }) {
                 .join("")}
             </div>
             <div>
-              <p>{selected.id}</p>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  marginBottom: "4px",
+                }}
+              >
+                <span className="hero-id-badge">
+                  PATIENT ID: <b>{selected.id}</b>
+                </span>
+              </div>
               <h2>{selected.name}</h2>
               <span>
                 {selected.contact} · {selected.disease}
@@ -837,9 +952,16 @@ function Suggestions({ patients, onUpdate }) {
                   .join("")}
               </i>
               <div>
-                <strong>{patient.name}</strong>
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                >
+                  <strong>{patient.name}</strong>
+                  <span className="patient-id-pill" title="Unique Patient ID">
+                    {patient.id}
+                  </span>
+                </div>
                 <span>
-                  {patient.id} · {patient.disease} · {patient.contact}
+                  {patient.disease} · {patient.contact}
                 </span>
               </div>
               <em>{(patient.suggestions || []).length} suggestions</em>
@@ -870,7 +992,18 @@ function Suggestions({ patients, onUpdate }) {
                 .join("")}
             </div>
             <div>
-              <p>{selected.id}</p>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  marginBottom: "4px",
+                }}
+              >
+                <span className="hero-id-badge">
+                  PATIENT ID: <b>{selected.id}</b>
+                </span>
+              </div>
               <h2>{selected.name}</h2>
               <span>
                 {selected.age} years · {selected.disease}
@@ -1075,7 +1208,18 @@ function PatientDetails({ patient, onBack, onUpdate }) {
             .join("")}
         </div>
         <div>
-          <p>Patient record · {patient.id}</p>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "5px",
+            }}
+          >
+            <span className="hero-id-badge">
+              PATIENT ID: <b>{patient.id}</b>
+            </span>
+          </div>
           <h1>{patient.name}</h1>
           <span>
             {patient.age} years · {patient.disease}
@@ -1091,6 +1235,7 @@ function PatientDetails({ patient, onBack, onUpdate }) {
       <div className="detail-grid">
         <section className="detail-card">
           <h2>Personal details</h2>
+          <Data label="Patient ID" value={patient.id} />
           <Data label="Email" value={patient.email} />
           <Data label="Contact number" value={patient.contact} />
           <Data label="Address" value={patient.address} />
@@ -1223,9 +1368,14 @@ function Patients({ patients, onSelect }) {
               .join("")}
           </i>
           <div>
-            <strong>{p.name}</strong>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <strong>{p.name}</strong>
+              <span className="patient-id-pill" title="Unique Patient ID">
+                {p.id}
+              </span>
+            </div>
             <span>
-              {p.id} · {p.age} years · {p.disease}
+              {p.age} years · {p.disease}
             </span>
           </div>
           <small>{p.contact}</small>

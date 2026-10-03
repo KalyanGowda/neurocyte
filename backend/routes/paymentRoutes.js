@@ -138,76 +138,81 @@ router.patch(
   "/:id/payments/:transactionRecordId/status",
   authenticate,
   async (req, res) => {
-  try {
-    const { id: patientId, transactionRecordId } = req.params
-    const { method, status, id: transactionId, note = "" } = req.body
+    try {
+      const { id: patientId, transactionRecordId } = req.params
+      const { method, status, id: transactionId, note = "" } = req.body
 
-    if (!status || !["Paid", "Pending"].includes(status)) {
-      return res.status(400).json({
-        error: "Valid status ('Paid' or 'Pending') is required.",
-      })
-    }
-    if (!method || !transactionId?.trim()) {
-      return res.status(400).json({
-        error: "Payment method and transaction ID are required.",
-      })
-    }
+      if (!status || !["Paid", "Pending"].includes(status)) {
+        return res.status(400).json({
+          error: "Valid status ('Paid' or 'Pending') is required.",
+        })
+      }
+      if (!method || !transactionId?.trim()) {
+        return res.status(400).json({
+          error: "Payment method and transaction ID are required.",
+        })
+      }
 
-    // 1. Update the selected transaction record.
-    const updateTxRes = await query(
-      `UPDATE payment_transactions
+      // 1. Update the selected transaction record.
+      const updateTxRes = await query(
+        `UPDATE payment_transactions
        SET method = $1, status = $2, transaction_id = $3, note = $4
        WHERE patient_id = $5 AND id = $6
        RETURNING *`,
-      [
-        method,
-        status,
-        transactionId.trim(),
-        note.trim(),
-        patientId,
-        transactionRecordId,
-      ],
-    )
+        [
+          method,
+          status,
+          transactionId.trim(),
+          note.trim(),
+          patientId,
+          transactionRecordId,
+        ],
+      )
 
-    if (updateTxRes.rows.length === 0) {
-      return res.status(404).json({
-        error: "Transaction record not found for this patient.",
-      })
-    }
+      if (updateTxRes.rows.length === 0) {
+        return res.status(404).json({
+          error: "Transaction record not found for this patient.",
+        })
+      }
 
-    // 2. Synchronize the patient's summary with its latest transaction.
-    const latestTxRes = await query(
-      `SELECT status, method, transaction_id
+      // 2. Synchronize the patient's summary with its latest transaction.
+      const latestTxRes = await query(
+        `SELECT status, method, transaction_id
        FROM payment_transactions
        WHERE patient_id = $1
        ORDER BY created_at DESC
        LIMIT 1`,
-      [patientId],
-    )
+        [patientId],
+      )
 
-    if (latestTxRes.rows.length > 0) {
-      const latestTx = latestTxRes.rows[0]
-      await query(
-        `UPDATE patients
+      if (latestTxRes.rows.length > 0) {
+        const latestTx = latestTxRes.rows[0]
+        await query(
+          `UPDATE patients
          SET payment_status = $1, payment_method = $2, transaction_id = $3, updated_at = NOW()
          WHERE id = $4`,
-        [latestTx.status, latestTx.method, latestTx.transaction_id, patientId],
-      )
-    }
+          [
+            latestTx.status,
+            latestTx.method,
+            latestTx.transaction_id,
+            patientId,
+          ],
+        )
+      }
 
-    // 3. Return full updated patient record
-    const updatedRes = await query(`${PATIENT_SELECT_SQL} WHERE p.id = $1`, [
-      patientId,
-    ])
-    res.json({
-      message: `Transaction ${transactionId.trim()} updated successfully.`,
-      patient: updatedRes.rows[0],
-    })
-  } catch (err) {
-    console.error("Update transaction status error:", err)
-    res.status(500).json({ error: "Failed to update transaction status." })
-  }
+      // 3. Return full updated patient record
+      const updatedRes = await query(`${PATIENT_SELECT_SQL} WHERE p.id = $1`, [
+        patientId,
+      ])
+      res.json({
+        message: `Transaction ${transactionId.trim()} updated successfully.`,
+        patient: updatedRes.rows[0],
+      })
+    } catch (err) {
+      console.error("Update transaction status error:", err)
+      res.status(500).json({ error: "Failed to update transaction status." })
+    }
   },
 )
 
-export default router;
+export default router

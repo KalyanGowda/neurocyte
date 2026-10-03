@@ -113,6 +113,8 @@ export const adminApi = {
 }
 
 export const patientApi = {
+  getNextId: () => apiRequest("/patients/next-id"),
+
   getPatients: (query = "") => {
     const q = query ? `?query=${encodeURIComponent(query)}` : ""
     return apiRequest(`/patients${q}`)

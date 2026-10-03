@@ -168,3 +168,123 @@ html, body, #root {
 .report-link{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#287795;text-decoration:none}.report-link:hover{color:#17566f}
 
 .history-row{width:100%;border:0;background:#fff;text-align:left;cursor:pointer}.history-row:hover,.history-row.selected{background:#f3fafc}.history-edit-hint{grid-column:1/-1;justify-self:end;color:#3a88a7!important}.visit-payment-card form>.cancel-edit{background:#edf5f7;color:#3b7184}.report-link{text-decoration:none!important}.report-link:hover{text-decoration:none!important}
+
+/* Patient ID Badges and Blocks */
+.patient-id-block { width: 100%; margin-bottom: 4px; }
+.patient-id-display-block {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: #edf7fa;
+  border: 1.5px solid #bce1ee;
+  border-radius: 9px;
+  padding: 16px 20px;
+}
+.patient-id-badge-hero {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #2b708e, #1a4d64);
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-family: 'Exo 2', sans-serif;
+  box-shadow: 0 4px 12px rgba(43, 112, 142, 0.25);
+}
+.patient-id-badge-hero .id-icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: #7ecfb3;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-style: normal;
+}
+.patient-id-badge-hero .id-code {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.patient-id-meta-text { flex: 1; }
+.patient-id-status-badge {
+  display: inline-block;
+  background: #dff4e9;
+  color: #237a57;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-family: 'Exo 2', sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.patient-id-meta-text p {
+  margin: 0;
+  color: #557280;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.patient-id-pill {
+  background: #eaf5f9;
+  color: #286d8b;
+  border: 1px solid #c9e4ef;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-family: 'Exo 2', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.hero-id-badge {
+  background: #eaf5f9;
+  color: #286d8b;
+  border: 1px solid #bde1ef;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  display: inline-block;
+}
+.search-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 10px;
+}
+.search-meta .results { margin: 0; }
+.search-filter-tag {
+  font-size: 10px;
+  background: #edf7fa;
+  color: #367e9e;
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-weight: 600;
+  font-family: 'Exo 2', sans-serif;
+  letter-spacing: 0.04em;
+  border: 1px solid #d4e7ee;
+}
+.clear-search-btn {
+  border: 0;
+  background: transparent;
+  color: #8aa1ab;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.clear-search-btn:hover { color: #3a758e; }
+@media(max-width: 600px) {
+  .patient-id-display-block {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+

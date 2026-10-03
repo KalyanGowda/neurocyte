@@ -60,7 +60,7 @@ const PATIENT_SELECT_SQL = `
   FROM patients p
 `
 
-// GET /api/patients?query=...
+// GET /api/patients?query=... (Search through patient name and patient ID)
 router.get("/", authenticate, async (req, res) => {
   try {
     const searchQuery = req.query.query ? req.query.query.trim() : null
@@ -69,8 +69,16 @@ router.get("/", authenticate, async (req, res) => {
     const params = []
 
     if (searchQuery) {
-      sql += ` WHERE p.name ILIKE $1 OR p.id ILIKE $1 OR p.contact ILIKE $1 `
-      params.push(`%${searchQuery}%`)
+      const cleanQ = searchQuery.trim()
+      const numericPart = cleanQ.replace(/[^0-9]/g, "")
+      if (numericPart) {
+        // Match name or patient ID (full format or numeric suffix)
+        sql += ` WHERE (p.name ILIKE $1 OR p.id ILIKE $1 OR p.id ILIKE $2) `
+        params.push(`%${cleanQ}%`, `%${numericPart}%`)
+      } else {
+        sql += ` WHERE (p.name ILIKE $1 OR p.id ILIKE $1) `
+        params.push(`%${cleanQ}%`)
+      }
     }
 
     sql += ` ORDER BY p.created_at DESC`
@@ -80,6 +88,31 @@ router.get("/", authenticate, async (req, res) => {
   } catch (err) {
     console.error("Fetch patients error:", err)
     res.status(500).json({ error: "Failed to retrieve patient records." })
+  }
+})
+
+// GET /api/patients/next-id (Compute next auto-incremented, non-repeating Patient ID)
+router.get("/next-id", authenticate, async (req, res) => {
+  try {
+    const maxRes = await query(`
+      SELECT COALESCE(
+        MAX(
+          CASE 
+            WHEN id ~ '^PT-[0-9]+$' 
+            THEN SUBSTRING(id FROM 4)::BIGINT 
+            ELSE NULL 
+          END
+        ),
+        2048
+      ) AS max_id
+      FROM patients
+    `)
+    const maxNum = parseInt(maxRes.rows[0].max_id, 10) || 2048
+    const nextId = `PT-${maxNum + 1}`
+    res.json({ nextId, numericId: maxNum + 1 })
+  } catch (err) {
+    console.error("Fetch next patient ID error:", err)
+    res.status(500).json({ error: "Failed to determine next patient ID." })
   }
 })
 
@@ -101,7 +134,7 @@ router.get("/:id", authenticate, async (req, res) => {
   }
 })
 
-// POST /api/patients (Register new patient)
+// POST /api/patients (Register new patient with auto-incremented, non-repeating Patient ID)
 router.post("/", authenticate, async (req, res) => {
   try {
     const {
@@ -135,11 +168,40 @@ router.post("/", authenticate, async (req, res) => {
       })
     }
 
-    // Generate next PT-ID
-    const seqRes = await query(
-      "SELECT 'PT-' || nextval('patient_id_seq') AS id",
-    )
-    const patientId = seqRes.rows[0].id
+    // Compute next unique, non-repeating PT-ID based on highest existing ID
+    const maxRes = await query(`
+      SELECT COALESCE(
+        MAX(
+          CASE 
+            WHEN id ~ '^PT-[0-9]+$' 
+            THEN SUBSTRING(id FROM 4)::BIGINT 
+            ELSE NULL 
+          END
+        ),
+        2048
+      ) AS max_id
+      FROM patients
+    `)
+    const maxNum = parseInt(maxRes.rows[0].max_id, 10) || 2048
+    let nextNumeric = maxNum + 1
+    let patientId = `PT-${nextNumeric}`
+
+    // Ensure collision-free uniqueness against any concurrent or anomalous record
+    let exists = await query("SELECT 1 FROM patients WHERE id = $1", [
+      patientId,
+    ])
+    while (exists.rows.length > 0) {
+      nextNumeric += 1
+      patientId = `PT-${nextNumeric}`
+      exists = await query("SELECT 1 FROM patients WHERE id = $1", [patientId])
+    }
+
+    // Keep sequence synchronized with current max
+    try {
+      await query("SELECT setval('patient_id_seq', $1, true)", [nextNumeric])
+    } catch (seqErr) {
+      console.warn("Sequence update notice:", seqErr.message)
+    }
 
     // Insert patient
     await query(
