@@ -1,4 +1,5 @@
 import express from "express"
+import { randomUUID } from "node:crypto"
 import { query } from "../config/db.js"
 import { authenticate } from "../middleware/auth.js"
 
@@ -66,12 +67,6 @@ router.post("/:id/payments", authenticate, async (req, res) => {
   try {
     const { id: patientId } = req.params
     const { method, id: transactionId, note = "", amount } = req.body
-
-    if (!transactionId || !transactionId.trim()) {
-      return res.status(400).json({
-        error: "Enter a transaction or receipt ID to update this visit.",
-      })
-    }
     if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
       return res.status(400).json({ error: "Enter a payment amount greater than zero." })
     }
@@ -95,6 +90,7 @@ router.post("/:id/payments", authenticate, async (req, res) => {
       month: "short",
       year: "numeric",
     }).format(new Date())
+    const receiptId = transactionId?.trim() || `RCPT-${randomUUID().slice(0, 8).toUpperCase()}`
 
     // 1. Insert transaction record
     await query(
@@ -102,7 +98,7 @@ router.post("/:id/payments", authenticate, async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         patientId,
-        transactionId.trim(),
+        receiptId,
         method || "Card",
         "Paid",
         Number(amount),
@@ -116,7 +112,7 @@ router.post("/:id/payments", authenticate, async (req, res) => {
       `UPDATE patients
        SET payment_method = $1, payment_status = $2, transaction_id = $3, updated_at = NOW()
        WHERE id = $4`,
-      [method || "Card", "Paid", transactionId.trim(), patientId],
+      [method || "Card", "Paid", receiptId, patientId],
     )
 
     // 3. Return full updated patient record
@@ -163,9 +159,9 @@ router.patch(
       const { id: patientId, transactionRecordId } = req.params
       const { method, id: transactionId, note = "", payAmount = 0 } = req.body
 
-      if (!method || !transactionId?.trim()) {
+      if (!method) {
         return res.status(400).json({
-          error: "Payment method and transaction ID are required.",
+          error: "Payment method is required.",
         })
       }
       if (!Number.isFinite(Number(payAmount)) || Number(payAmount) < 0) {
@@ -174,7 +170,7 @@ router.patch(
 
       const patientRes = await query("SELECT billing_amount FROM patients WHERE id = $1", [patientId])
       if (!patientRes.rows.length) return res.status(404).json({ error: "Patient record not found." })
-      const txRes = await query("SELECT amount FROM payment_transactions WHERE patient_id = $1 AND id = $2", [patientId, transactionRecordId])
+      const txRes = await query("SELECT amount, transaction_id FROM payment_transactions WHERE patient_id = $1 AND id = $2", [patientId, transactionRecordId])
       if (!txRes.rows.length) return res.status(404).json({ error: "Transaction record not found for this patient." })
       const paidRes = await query("SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1", [patientId])
       const remaining = Number(patientRes.rows[0].billing_amount) - Number(paidRes.rows[0].paid)
@@ -192,7 +188,7 @@ router.patch(
         [
           method,
           Number(payAmount),
-          transactionId.trim(),
+          transactionId?.trim() || txRes.rows[0].transaction_id,
           note.trim(),
           patientId,
           transactionRecordId,
@@ -235,7 +231,7 @@ router.patch(
         patientId,
       ])
       res.json({
-        message: `Transaction ${transactionId.trim()} updated successfully.`,
+        message: "Transaction updated successfully.",
         patient: updatedRes.rows[0],
       })
     } catch (err) {

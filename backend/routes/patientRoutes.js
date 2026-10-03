@@ -150,12 +150,12 @@ router.post("/", authenticate, async (req, res) => {
       emergencyName,
       emergencyContact,
       payment = "Card",
-      paymentStatus = "Pending",
       billingAmount,
       amount = 0,
       transaction = "",
       report = "",
     } = req.body
+    const paymentStatus = Number(amount) >= Number(billingAmount) ? "Paid" : "Pending"
 
     // Validate required fields
     if (

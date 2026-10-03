@@ -11,7 +11,6 @@ const blank = () => ({
   emergencyName: "",
   emergencyContact: "",
   payment: "Card",
-  paymentStatus: "Pending",
   billingAmount: "",
   amount: "0",
   transaction: "",
@@ -144,7 +143,6 @@ export default function Dashboard({ mode, user, onLogout }) {
         emergencyName: form.emergencyName,
         emergencyContact: form.emergencyContact,
         payment: form.payment,
-        paymentStatus: form.paymentStatus,
         billingAmount: form.billingAmount,
         amount: form.amount,
         transaction: form.transaction,
@@ -473,21 +471,8 @@ function NewPatient({ form, setForm, notice, save, nextId }) {
                 <option>Insurance</option>
               </select>
             </label>
-            <label>
-              <span>
-                Payment status <b>*</b>
-              </span>
-              <select
-                value={form.paymentStatus}
-                onChange={(e) =>
-                  setForm({ ...form, paymentStatus: e.target.value })
-                }
-              >
-                <option>Pending</option>
-                <option>Paid</option>
-              </select>
-            </label>
-            {input("transaction", "Transaction / receipt ID")}
+            <p className="payment-status-note wide">Payment status is set automatically from the billing amount and amount paid.</p>
+            {input("transaction", "Transaction / receipt ID", true)}
           </div>
         </Block>
 
@@ -581,6 +566,7 @@ function Payments({ patients, onUpdate }) {
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(null)
   const [selectedTransaction, setSelectedTransaction] = useState(null)
+  const [expandedHistoryGroup, setExpandedHistoryGroup] = useState(null)
   const [transaction, setTransaction] = useState({
     method: "Card",
     status: "Paid",
@@ -600,12 +586,20 @@ function Payments({ patients, onUpdate }) {
     (sum, item) => sum + Number(item.amount || 0),
     0,
   )
+  const hasPendingAmount = Number(selected?.pendingAmount || 0) > 0
+  const groupedHistory = useMemo(() => {
+    const groups = new Map()
+    for (const item of selected?.paymentHistory || []) {
+      const note = (item.note || "").trim()
+      const key = note ? note.toLocaleLowerCase() : `transaction-${item.recordId || item.id}`
+      if (!groups.has(key)) groups.set(key, { key, title: note || "Patient visit", transactions: [] })
+      groups.get(key).transactions.push(item)
+    }
+    return Array.from(groups.values())
+  }, [selected])
 
   const saveTransaction = async (event) => {
     event.preventDefault()
-    if (!transaction.id.trim()) {
-      return setNotice("Enter a transaction or receipt ID.")
-    }
     if ((!selectedTransaction || transaction.amount !== "") && Number(transaction.amount) <= 0) {
       return setNotice("Enter a pay amount greater than zero.")
     }
@@ -622,6 +616,7 @@ function Payments({ patients, onUpdate }) {
       onUpdate(res.patient)
       setSelected(res.patient)
       setSelectedTransaction(null)
+      setExpandedHistoryGroup(null)
       setTransaction({ method: "Card", status: "Paid", id: "", amount: "", note: "" })
       setNotice(
         selectedTransaction
@@ -677,6 +672,7 @@ function Payments({ patients, onUpdate }) {
               onClick={() => {
                 setSelected(patient)
                 setSelectedTransaction(null)
+                setExpandedHistoryGroup(null)
                 setTransaction({
                   method: "Card",
                   status: "Paid",
@@ -729,6 +725,7 @@ function Payments({ patients, onUpdate }) {
             onClick={() => {
               setSelected(null)
               setSelectedTransaction(null)
+              setExpandedHistoryGroup(null)
               setTransaction({
                 method: "Card",
                 status: "Paid",
@@ -786,33 +783,50 @@ function Payments({ patients, onUpdate }) {
                   <h2>Transaction history</h2>
                   <p>Every payment recorded for this patient.</p>
                 </div>
-                <span>{(selected.paymentHistory || []).length} visits</span>
+                <span>{(selected.paymentHistory || []).length} transactions</span>
               </div>
               <div className="history-table">
-                {(selected.paymentHistory || []).map((item, idx) => (
-                  <button
-                    type="button"
-                    className={`history-row ${
-                      selectedTransaction?.recordId === item.recordId
-                        ? "selected"
-                        : ""
-                    }`}
-                    key={`${item.recordId || item.id}-${idx}`}
-                    onClick={() => editTransaction(item)}
-                  >
-                    <div>
-                      <strong>{item.id}</strong>
-                      <span>{item.note || "Patient visit"}</span>
-                    </div>
-                    <small>{item.date}</small>
-                    <small>{item.method}</small>
-                    <small className="history-amount">Paid ₹{Number(item.amount || 0).toLocaleString("en-IN")}</small>
-                    <em className={Number(item.amount || 0) > 0 ? "paid" : "pending"}>
-                      {Number(item.amount || 0) > 0 ? "Paid" : "Pending"}
-                    </em>
-                    <small className="history-edit-hint">Select to edit</small>
-                  </button>
-                ))}
+                {groupedHistory.map((group) => {
+                  const isExpanded = expandedHistoryGroup === group.key
+                  const groupPaid = group.transactions.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+                  return (
+                    <section className="history-group" key={group.key}>
+                      <button
+                        type="button"
+                        className="history-group-summary"
+                        aria-expanded={isExpanded}
+                        onClick={() => setExpandedHistoryGroup(isExpanded ? null : group.key)}
+                      >
+                        <span>
+                          <strong>{group.title}</strong>
+                          <small>{group.transactions.length} transaction{group.transactions.length === 1 ? "" : "s"} · Paid ₹{groupPaid.toLocaleString("en-IN")}</small>
+                        </span>
+                        <small>{group.transactions[0]?.date}</small>
+                        <b>{isExpanded ? "Hide transactions ↑" : "View transactions →"}</b>
+                      </button>
+                      {isExpanded && group.transactions.map((item, idx) => (
+                        <button
+                          type="button"
+                          className={`history-row ${selectedTransaction?.recordId === item.recordId ? "selected" : ""}`}
+                          key={`${item.recordId || item.id}-${idx}`}
+                          onClick={() => editTransaction(item)}
+                        >
+                          <div>
+                            <strong>{item.id}</strong>
+                            <span>{item.note || "Patient visit"}</span>
+                          </div>
+                          <small>{item.date}</small>
+                          <small>{item.method}</small>
+                          <small className="history-amount">Paid ₹{Number(item.amount || 0).toLocaleString("en-IN")}</small>
+                          <em className={Number(item.amount || 0) > 0 ? "paid" : "pending"}>
+                            {Number(item.amount || 0) > 0 ? "Paid" : "Pending"}
+                          </em>
+                          <small className="history-edit-hint">Select to edit</small>
+                        </button>
+                      ))}
+                    </section>
+                  )
+                })}
                 {!(selected.paymentHistory || []).length && (
                   <div className="empty">No payments logged yet.</div>
                 )}
@@ -846,14 +860,18 @@ function Payments({ patients, onUpdate }) {
                 <label>
                   Pay amount
                   <input
-                    type="number"
+                    type={hasPendingAmount ? "number" : "text"}
                     min="0.01"
-                    max={Math.max(Number(selected.pendingAmount || 0), 0)}
+                    max={hasPendingAmount ? Number(selected.pendingAmount) : undefined}
                     step="0.01"
-                    value={transaction.amount}
+                    value={hasPendingAmount ? transaction.amount : "No due"}
+                    readOnly={!hasPendingAmount}
+                    onClick={() => {
+                      if (!hasPendingAmount) setNotice("No due.")
+                    }}
                     onChange={(e) => setTransaction({ ...transaction, amount: e.target.value })}
-                    placeholder="Enter amount to pay"
-                    required={!selectedTransaction}
+                    placeholder={hasPendingAmount ? "Enter amount to pay" : "No due"}
+                    required={!selectedTransaction && hasPendingAmount}
                   />
                 </label>
                 <label>
@@ -877,8 +895,7 @@ function Payments({ patients, onUpdate }) {
                     onChange={(e) =>
                       setTransaction({ ...transaction, id: e.target.value })
                     }
-                    placeholder="e.g. TXN-784513"
-                    required
+                    placeholder="Optional receipt ID"
                   />
                 </label>
                 <label className="full">
@@ -912,7 +929,7 @@ function Payments({ patients, onUpdate }) {
                     Cancel editing
                   </button>
                 )}
-                <button disabled={submitting}>
+                <button disabled={submitting || (!hasPendingAmount && !selectedTransaction)}>
                   {submitting
                     ? "Saving transaction..."
                     : selectedTransaction
