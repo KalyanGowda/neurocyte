@@ -12,6 +12,8 @@ const blank = () => ({
   emergencyContact: "",
   payment: "Card",
   paymentStatus: "Pending",
+  billingAmount: "",
+  amount: "0",
   transaction: "",
   report: "",
   reportFile: null,
@@ -143,6 +145,8 @@ export default function Dashboard({ mode, user, onLogout }) {
         emergencyContact: form.emergencyContact,
         payment: form.payment,
         paymentStatus: form.paymentStatus,
+        billingAmount: form.billingAmount,
+        amount: form.amount,
         transaction: form.transaction,
         report: form.report,
       })
@@ -448,6 +452,14 @@ function NewPatient({ form, setForm, notice, save, nextId }) {
         <Block n="04" title="Payment transaction">
           <div className="grid">
             <label>
+              <span>Billing amount <b>*</b></span>
+              <input type="number" min="0.01" step="0.01" required value={form.billingAmount} onChange={(e) => setForm({ ...form, billingAmount: e.target.value })} placeholder="Enter total bill" />
+            </label>
+            <label>
+              <span>Amount paid</span>
+              <input type="number" min="0" max={form.billingAmount || undefined} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
+            </label>
+            <label>
               <span>
                 Payment method <b>*</b>
               </span>
@@ -573,6 +585,7 @@ function Payments({ patients, onUpdate }) {
     method: "Card",
     status: "Paid",
     id: "",
+    amount: "",
     note: "",
   })
   const [notice, setNotice] = useState("")
@@ -583,13 +596,18 @@ function Payments({ patients, onUpdate }) {
       .toLowerCase()
       .includes(query.toLowerCase()),
   )
+  const totalPaid = (selected?.paymentHistory || []).reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0,
+  )
 
   const saveTransaction = async (event) => {
     event.preventDefault()
     if (!transaction.id.trim()) {
-      return setNotice(
-        "Enter a transaction or receipt ID to update this visit.",
-      )
+      return setNotice("Enter a transaction or receipt ID.")
+    }
+    if ((!selectedTransaction || transaction.amount !== "") && Number(transaction.amount) <= 0) {
+      return setNotice("Enter a pay amount greater than zero.")
     }
     setSubmitting(true)
     setNotice("")
@@ -598,13 +616,13 @@ function Payments({ patients, onUpdate }) {
         ? await paymentApi.updateTransaction(
             selected.id,
             selectedTransaction.recordId,
-            transaction,
+            { ...transaction, payAmount: Number(transaction.amount || 0) },
           )
-        : await paymentApi.addPayment(selected.id, transaction)
+        : await paymentApi.addPayment(selected.id, { ...transaction, amount: Number(transaction.amount) })
       onUpdate(res.patient)
       setSelected(res.patient)
       setSelectedTransaction(null)
-      setTransaction({ method: "Card", status: "Paid", id: "", note: "" })
+      setTransaction({ method: "Card", status: "Paid", id: "", amount: "", note: "" })
       setNotice(
         selectedTransaction
           ? "Transaction updated successfully."
@@ -623,6 +641,7 @@ function Payments({ patients, onUpdate }) {
       method: item.method || "Card",
       status: item.status || "Pending",
       id: item.id || "",
+      amount: "",
       note: item.note || "",
     })
     setNotice("")
@@ -630,7 +649,7 @@ function Payments({ patients, onUpdate }) {
 
   const cancelEdit = () => {
     setSelectedTransaction(null)
-    setTransaction({ method: "Card", status: "Paid", id: "", note: "" })
+    setTransaction({ method: "Card", status: "Paid", id: "", amount: "", note: "" })
     setNotice("")
   }
 
@@ -662,6 +681,7 @@ function Payments({ patients, onUpdate }) {
                   method: "Card",
                   status: "Paid",
                   id: "",
+                  amount: "",
                   note: "",
                 })
                 setNotice("")
@@ -684,6 +704,11 @@ function Payments({ patients, onUpdate }) {
                   </span>
                 </div>
                 <span>{patient.contact}</span>
+                <div className="billing-summary patient-list-billing">
+                  <span>Billing <strong>₹{Number(patient.billingAmount || 0).toLocaleString("en-IN")}</strong></span>
+                  <span>Paid <strong>₹{(Number(patient.billingAmount || 0) - Number(patient.pendingAmount || 0)).toLocaleString("en-IN")}</strong></span>
+                  <span>Pending <strong>₹{Number(patient.pendingAmount || 0).toLocaleString("en-IN")}</strong></span>
+                </div>
               </div>
               <em
                 className={(patient.paymentStatus || "pending").toLowerCase()}
@@ -708,6 +733,7 @@ function Payments({ patients, onUpdate }) {
                 method: "Card",
                 status: "Paid",
                 id: "",
+                amount: "",
                 note: "",
               })
               setNotice("")
@@ -736,14 +762,21 @@ function Payments({ patients, onUpdate }) {
                   PATIENT ID: <b>{selected.id}</b>
                 </span>
               </div>
-              <h2>{selected.name}</h2>
+              <div className="patient-name-status">
+                <h2>{selected.name}</h2>
+                <em className={(selected.paymentStatus || "pending").toLowerCase()}>
+                  ● {selected.paymentStatus || "Pending"}
+                </em>
+              </div>
               <span>
                 {selected.contact} · {selected.disease}
               </span>
+              <div className="billing-summary">
+                <span>Billing <strong>₹{Number(selected.billingAmount || 0).toLocaleString("en-IN")}</strong></span>
+                <span>Paid <strong>₹{totalPaid.toLocaleString("en-IN")}</strong></span>
+                <span>Pending <strong>₹{Number(selected.pendingAmount || 0).toLocaleString("en-IN")}</strong></span>
+              </div>
             </div>
-            <em className={(selected.paymentStatus || "pending").toLowerCase()}>
-              ● Current: {selected.paymentStatus || "Pending"}
-            </em>
           </div>
 
           <div className="payment-columns">
@@ -773,8 +806,9 @@ function Payments({ patients, onUpdate }) {
                     </div>
                     <small>{item.date}</small>
                     <small>{item.method}</small>
-                    <em className={(item.status || "paid").toLowerCase()}>
-                      {item.status}
+                    <small className="history-amount">Paid ₹{Number(item.amount || 0).toLocaleString("en-IN")}</small>
+                    <em className={Number(item.amount || 0) > 0 ? "paid" : "pending"}>
+                      {Number(item.amount || 0) > 0 ? "Paid" : "Pending"}
                     </em>
                     <small className="history-edit-hint">Select to edit</small>
                   </button>
@@ -795,12 +829,33 @@ function Payments({ patients, onUpdate }) {
                   </h2>
                   <p>
                     {selectedTransaction
-                      ? "Change the selected transaction details, then save your changes."
+                      ? "Review the payment details or record an additional payment."
                       : "Record a new transaction for this patient visit."}
                   </p>
                 </div>
               </div>
               <form onSubmit={saveTransaction}>
+                <label>
+                  Amount paid so far
+                  <input
+                    type="text"
+                    value={`₹${totalPaid.toLocaleString("en-IN")}`}
+                    readOnly
+                  />
+                </label>
+                <label>
+                  Pay amount
+                  <input
+                    type="number"
+                    min="0.01"
+                    max={Math.max(Number(selected.pendingAmount || 0), 0)}
+                    step="0.01"
+                    value={transaction.amount}
+                    onChange={(e) => setTransaction({ ...transaction, amount: e.target.value })}
+                    placeholder="Enter amount to pay"
+                    required={!selectedTransaction}
+                  />
+                </label>
                 <label>
                   Payment method
                   <select
@@ -813,18 +868,6 @@ function Payments({ patients, onUpdate }) {
                     <option>Cash</option>
                     <option>UPI</option>
                     <option>Insurance</option>
-                  </select>
-                </label>
-                <label>
-                  Payment status
-                  <select
-                    value={transaction.status}
-                    onChange={(e) =>
-                      setTransaction({ ...transaction, status: e.target.value })
-                    }
-                  >
-                    <option>Paid</option>
-                    <option>Pending</option>
                   </select>
                 </label>
                 <label>
@@ -1183,17 +1226,6 @@ function PatientDetails({ patient, onBack, onUpdate }) {
     }
   }
 
-  const handleStatusChange = async (newStatus) => {
-    try {
-      const res = await patientApi.updatePaymentStatus(patient.id, newStatus)
-      if (res.patient) {
-        onUpdate(res.patient)
-      }
-    } catch (err) {
-      setMessage(err.message || "Failed to update payment status.")
-    }
-  }
-
   return (
     <>
       <button className="back" onClick={onBack}>
@@ -1248,20 +1280,13 @@ function PatientDetails({ patient, onBack, onUpdate }) {
           <Data label="Contact number" value={patient.emergencyContact} />
           <h2 className="payment-title">Payment details</h2>
           <Data label="Method" value={patient.payment} />
+          <Data label="Billing amount" value={`₹${Number(patient.billingAmount || 0).toLocaleString("en-IN")}`} />
+          <Data label="Amount paid" value={`₹${(Number(patient.billingAmount || 0) - Number(patient.pendingAmount || 0)).toLocaleString("en-IN")}`} />
+          <Data label="Pending amount" value={`₹${Number(patient.pendingAmount || 0).toLocaleString("en-IN")}`} />
           <Data
             label="Transaction ID"
             value={patient.transaction || "None recorded"}
           />
-          <label className="status-control">
-            Payment status
-            <select
-              value={patient.paymentStatus || "Pending"}
-              onChange={(e) => handleStatusChange(e.target.value)}
-            >
-              <option>Pending</option>
-              <option>Paid</option>
-            </select>
-          </label>
         </section>
       </div>
 

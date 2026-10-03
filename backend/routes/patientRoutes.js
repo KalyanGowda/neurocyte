@@ -18,7 +18,9 @@ const PATIENT_SELECT_SQL = `
     p.emergency_name AS "emergencyName",
     p.emergency_contact AS "emergencyContact",
     p.payment_method AS "payment",
-    p.payment_status AS "paymentStatus",
+    p.billing_amount::text AS "billingAmount",
+    GREATEST(p.billing_amount - COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id), 0), 0)::text AS "pendingAmount",
+    CASE WHEN p.billing_amount <= COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id), 0) THEN 'Paid' ELSE 'Pending' END AS "paymentStatus",
     COALESCE(p.transaction_id, '') AS "transaction",
     COALESCE(p.report_name, '') AS "report",
     COALESCE(p.report_url, '') AS "reportUrl",
@@ -35,6 +37,7 @@ const PATIENT_SELECT_SQL = `
             'date', pt.payment_date,
             'method', pt.method,
             'status', pt.status,
+            'amount', pt.amount::text,
             'note', COALESCE(pt.note, '')
           ) ORDER BY pt.created_at DESC
         )
@@ -148,6 +151,8 @@ router.post("/", authenticate, async (req, res) => {
       emergencyContact,
       payment = "Card",
       paymentStatus = "Pending",
+      billingAmount,
+      amount = 0,
       transaction = "",
       report = "",
     } = req.body
@@ -166,6 +171,13 @@ router.post("/", authenticate, async (req, res) => {
       return res.status(400).json({
         error: "Complete all required fields before creating this record.",
       })
+    }
+
+    if (!Number.isFinite(Number(billingAmount)) || Number(billingAmount) <= 0 || !Number.isFinite(Number(amount)) || Number(amount) < 0) {
+      return res.status(400).json({ error: "Billing must be greater than zero, and payment amounts must be non-negative numbers." })
+    }
+    if (Number(amount) > Number(billingAmount)) {
+      return res.status(400).json({ error: "Amount paid cannot exceed the billing amount." })
     }
 
     // Compute next unique, non-repeating PT-ID based on highest existing ID
@@ -208,8 +220,8 @@ router.post("/", authenticate, async (req, res) => {
       `INSERT INTO patients (
         id, name, age, disease, address, email, contact,
         emergency_name, emergency_contact, payment_method, payment_status,
-        transaction_id, report_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        transaction_id, report_name, billing_amount
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         patientId,
         name.trim(),
@@ -224,24 +236,26 @@ router.post("/", authenticate, async (req, res) => {
         paymentStatus,
         transaction.trim() || null,
         report || "",
+        Number(billingAmount),
       ],
     )
 
     // If transaction ID provided, record payment history entry
-    if (transaction && transaction.trim()) {
+    if ((transaction && transaction.trim()) || Number(amount) > 0) {
       const today = new Intl.DateTimeFormat("en-IN", {
         day: "2-digit",
         month: "short",
         year: "numeric",
       }).format(new Date())
       await query(
-        `INSERT INTO payment_transactions (patient_id, transaction_id, method, status, note, payment_date)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+        `INSERT INTO payment_transactions (patient_id, transaction_id, method, status, amount, note, payment_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           patientId,
-          transaction.trim(),
+          transaction.trim() || `INIT-${patientId}`,
           payment,
           paymentStatus,
+          Number(amount),
           "Initial consultation",
           today,
         ],

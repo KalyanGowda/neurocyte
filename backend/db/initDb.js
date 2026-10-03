@@ -169,6 +169,11 @@ export async function initDatabase() {
       console.log("✓ Seeded initial patient clinical and transaction records.")
     }
 
+    // Give existing records a one-time sample billing total when they predate billing amounts.
+    await query(
+      "UPDATE patients SET billing_amount = FLOOR(RANDOM() * 40001 + 10000) WHERE billing_amount = 0",
+    )
+
     // Ensure all existing patient records have a valid, unique Patient ID
     const unassignedPatients = await query(
       "SELECT ctid, id, name FROM patients WHERE id IS NULL OR id = '' OR id NOT LIKE 'PT-%'",

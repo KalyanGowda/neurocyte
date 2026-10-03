@@ -288,3 +288,7 @@ html, body, #root {
   }
 }
 
+
+.billing-summary{display:flex;gap:8px;margin-top:9px}.billing-summary span{display:flex;align-items:center;gap:5px;padding:5px 8px;border-radius:6px;background:#edf7fa;color:#6b8490;font-size:10px}.billing-summary strong{color:#2d6f89;font-size:11px}.billing-summary span:last-child{background:#fff5e7}.billing-summary span:last-child strong{color:#a46c1f}.history-amount{color:#318365!important;font-weight:700}
+
+.patient-name-status{display:flex;align-items:center;gap:9px}.patient-name-status em{margin:0!important;white-space:nowrap}.patient-list-billing{flex-wrap:wrap}.patient-list-billing span{display:flex!important}

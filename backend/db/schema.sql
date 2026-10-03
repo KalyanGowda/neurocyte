@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS patients (
   emergency_contact VARCHAR(50) NOT NULL,
   payment_method VARCHAR(50) NOT NULL DEFAULT 'Card',
   payment_status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (payment_status IN ('Pending', 'Paid')),
+  billing_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (billing_amount >= 0),
   transaction_id VARCHAR(100),
   report_name VARCHAR(255),
   report_url VARCHAR(500),
@@ -54,10 +55,14 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
   transaction_id VARCHAR(100) NOT NULL,
   method VARCHAR(50) NOT NULL DEFAULT 'Card',
   status VARCHAR(20) NOT NULL DEFAULT 'Paid',
+  amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
   note TEXT,
   payment_date VARCHAR(50) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS billing_amount NUMERIC(12, 2) NOT NULL DEFAULT 0;
+ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS amount NUMERIC(12, 2) NOT NULL DEFAULT 0;
 
 -- Payment Transactions Indexes
 CREATE INDEX IF NOT EXISTS idx_transactions_patient_id ON payment_transactions (patient_id);
