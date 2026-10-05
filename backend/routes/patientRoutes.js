@@ -276,6 +276,44 @@ router.post("/", authenticate, async (req, res) => {
   }
 })
 
+// PATCH /api/patients/:id/billing-amount
+router.patch("/:id/billing-amount", authenticate, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { billingAmount } = req.body
+    const newBillingAmount = Number(billingAmount)
+
+    if (!Number.isFinite(newBillingAmount) || newBillingAmount <= 0) {
+      return res.status(400).json({ error: "Billing amount must be a number greater than zero." })
+    }
+
+    const patientRes = await query("SELECT id FROM patients WHERE id = $1", [id])
+    if (!patientRes.rows.length) {
+      return res.status(404).json({ error: "Patient record not found." })
+    }
+    const paidRes = await query(
+      "SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1",
+      [id],
+    )
+    const totalPaid = Number(paidRes.rows[0].paid)
+    if (newBillingAmount < totalPaid) {
+      return res.status(400).json({
+        error: `Billing amount cannot be less than the ₹${totalPaid.toLocaleString("en-IN")} already paid.`,
+      })
+    }
+
+    await query(
+      "UPDATE patients SET billing_amount = $1, updated_at = NOW() WHERE id = $2",
+      [newBillingAmount, id],
+    )
+    const updatedRes = await query(`${PATIENT_SELECT_SQL} WHERE p.id = $1`, [id])
+    res.json({ patient: updatedRes.rows[0] })
+  } catch (err) {
+    console.error("Update billing amount error:", err)
+    res.status(500).json({ error: "Failed to update billing amount." })
+  }
+})
+
 // PATCH /api/patients/:id/payment-status
 router.patch("/:id/payment-status", authenticate, async (req, res) => {
   try {

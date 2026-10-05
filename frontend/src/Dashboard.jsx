@@ -451,11 +451,11 @@ function NewPatient({ form, setForm, notice, save, nextId }) {
           <div className="grid">
             <label>
               <span>Billing amount <b>*</b></span>
-              <input type="number" min="0.01" step="0.01" required value={form.billingAmount} onChange={(e) => setForm({ ...form, billingAmount: e.target.value })} placeholder="Enter total bill" />
+              <input type="number" min="1" step="1" required value={form.billingAmount} onChange={(e) => setForm({ ...form, billingAmount: e.target.value })} placeholder="Enter total bill" />
             </label>
             <label>
               <span>Amount paid</span>
-              <input type="number" min="0" max={form.billingAmount || undefined} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
+              <input type="number" min="0" max={form.billingAmount || undefined} step="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
             </label>
             <label>
               <span>
@@ -567,6 +567,9 @@ function Payments({ patients, onUpdate }) {
   const [selected, setSelected] = useState(null)
   const [selectedTransaction, setSelectedTransaction] = useState(null)
   const [expandedHistoryGroup, setExpandedHistoryGroup] = useState(null)
+  const [billingDraft, setBillingDraft] = useState("")
+  const [billingNotice, setBillingNotice] = useState("")
+  const [savingBilling, setSavingBilling] = useState(false)
   const [transaction, setTransaction] = useState({
     method: "Card",
     status: "Paid",
@@ -587,6 +590,10 @@ function Payments({ patients, onUpdate }) {
     0,
   )
   const hasPendingAmount = Number(selected?.pendingAmount || 0) > 0
+  useEffect(() => {
+    setBillingDraft(selected?.billingAmount || "")
+    setBillingNotice("")
+  }, [selected?.id])
   const groupedHistory = useMemo(() => {
     const groups = new Map()
     for (const item of selected?.paymentHistory || []) {
@@ -627,6 +634,23 @@ function Payments({ patients, onUpdate }) {
       setNotice(err.message || "Failed to record visit payment.")
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const saveBillingAmount = async (event) => {
+    event.preventDefault()
+    setSavingBilling(true)
+    setBillingNotice("")
+    try {
+      const res = await patientApi.updateBillingAmount(selected.id, Number(billingDraft))
+      onUpdate(res.patient)
+      setSelected(res.patient)
+      setBillingDraft(res.patient.billingAmount)
+      setBillingNotice("Billing amount updated successfully.")
+    } catch (err) {
+      setBillingNotice(err.message || "Failed to update billing amount.")
+    } finally {
+      setSavingBilling(false)
     }
   }
 
@@ -776,6 +800,28 @@ function Payments({ patients, onUpdate }) {
             </div>
           </div>
 
+          <form className="billing-update-form" onSubmit={saveBillingAmount}>
+            <div>
+              <strong>Update billing amount</strong>
+              <span>Must be at least the amount already paid (₹{totalPaid.toLocaleString("en-IN")}).</span>
+            </div>
+            <label>
+              Total billing amount
+              <input
+                type="number"
+                min={Math.max(totalPaid, 1)}
+                step="1"
+                value={billingDraft}
+                onChange={(e) => setBillingDraft(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit" disabled={savingBilling || Number(billingDraft) === Number(selected.billingAmount)}>
+              {savingBilling ? "Saving billing..." : "Update billing"}
+            </button>
+            {billingNotice && <p className={billingNotice.includes("successfully") ? "ok" : "warning"}>{billingNotice}</p>}
+          </form>
+
           <div className="payment-columns">
             <section className="history-card">
               <div className="card-heading">
@@ -861,9 +907,9 @@ function Payments({ patients, onUpdate }) {
                   Pay amount
                   <input
                     type={hasPendingAmount ? "number" : "text"}
-                    min="0.01"
+                    min="1"
                     max={hasPendingAmount ? Number(selected.pendingAmount) : undefined}
-                    step="0.01"
+                    step="1"
                     value={hasPendingAmount ? transaction.amount : "No due"}
                     readOnly={!hasPendingAmount}
                     onClick={() => {
