@@ -134,6 +134,12 @@ export const patientApi = {
       body: JSON.stringify({ paymentStatus }),
     }),
 
+  updateBillingAmount: (id, billingAmount) =>
+    apiRequest(`/patients/${id}/billing-amount`, {
+      method: "PATCH",
+      body: JSON.stringify({ billingAmount }),
+    }),
+
   uploadReport: (id, file) => {
     const formData = new FormData()
     formData.append("report", file)
