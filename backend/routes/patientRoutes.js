@@ -19,8 +19,8 @@ const PATIENT_SELECT_SQL = `
     p.emergency_contact AS "emergencyContact",
     p.payment_method AS "payment",
     p.billing_amount::text AS "billingAmount",
-    GREATEST(p.billing_amount - COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id), 0), 0)::text AS "pendingAmount",
-    CASE WHEN p.billing_amount <= COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id), 0) THEN 'Paid' ELSE 'Pending' END AS "paymentStatus",
+    GREATEST(p.billing_amount - COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0), 0)::text AS "pendingAmount",
+    CASE WHEN p.billing_amount <= COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0) THEN 'Paid' ELSE 'Pending' END AS "paymentStatus",
     COALESCE(p.transaction_id, '') AS "transaction",
     COALESCE(p.report_name, '') AS "report",
     COALESCE(p.report_url, '') AS "reportUrl",
@@ -151,6 +151,7 @@ router.post("/", authenticate, async (req, res) => {
       emergencyContact,
       payment = "Card",
       billingAmount,
+      serviceDescription = "Initial consultation",
       amount = 0,
       transaction = "",
       report = "",
@@ -166,7 +167,8 @@ router.post("/", authenticate, async (req, res) => {
       !email ||
       !contact ||
       !emergencyName ||
-      !emergencyContact
+      !emergencyContact ||
+      !serviceDescription?.trim()
     ) {
       return res.status(400).json({
         error: "Complete all required fields before creating this record.",
@@ -240,6 +242,13 @@ router.post("/", authenticate, async (req, res) => {
       ],
     )
 
+    const billingDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+    const billRes = await query(
+      `INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [patientId, serviceDescription.trim(), Number(billingAmount), billingDate, paymentStatus],
+    )
+
     // If transaction ID provided, record payment history entry
     if ((transaction && transaction.trim()) || Number(amount) > 0) {
       const today = new Intl.DateTimeFormat("en-IN", {
@@ -247,19 +256,21 @@ router.post("/", authenticate, async (req, res) => {
         month: "short",
         year: "numeric",
       }).format(new Date())
-      await query(
-        `INSERT INTO payment_transactions (patient_id, transaction_id, method, status, amount, note, payment_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      const paymentRes = await query(
+        `INSERT INTO payment_transactions (patient_id, transaction_id, method, status, amount, note, payment_date, billing_item_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
         [
           patientId,
           transaction.trim() || `INIT-${patientId}`,
           payment,
-          paymentStatus,
+          Number(amount) > 0 ? "Paid" : "Pending",
           Number(amount),
-          "Initial consultation",
+          serviceDescription.trim(),
           today,
+          billRes.rows[0].id,
         ],
       )
+      await query("UPDATE billing_items SET paid_transaction_id = $1 WHERE id = $2", [paymentRes.rows[0].id, billRes.rows[0].id])
     }
 
     // Retrieve fresh aggregated record
@@ -292,7 +303,7 @@ router.patch("/:id/billing-amount", authenticate, async (req, res) => {
       return res.status(404).json({ error: "Patient record not found." })
     }
     const paidRes = await query(
-      "SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1",
+      "SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1 AND status = 'Paid'",
       [id],
     )
     const totalPaid = Number(paidRes.rows[0].paid)

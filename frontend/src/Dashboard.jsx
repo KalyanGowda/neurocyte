@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
-import { patientApi, paymentApi, suggestionApi, adminApi } from "./api"
+import { patientApi, billingApi, suggestionApi, adminApi } from "./api"
+import { downloadBillPdf } from "./billingPdf"
 
 const blank = () => ({
   name: "",
@@ -14,6 +15,7 @@ const blank = () => ({
   billingAmount: "",
   amount: "0",
   transaction: "",
+  serviceDescription: "Initial consultation",
   report: "",
   reportFile: null,
   doctorSuggestion: "",
@@ -146,6 +148,7 @@ export default function Dashboard({ mode, user, onLogout }) {
         billingAmount: form.billingAmount,
         amount: form.amount,
         transaction: form.transaction,
+        serviceDescription: form.serviceDescription,
         report: form.report,
       })
 
@@ -253,6 +256,12 @@ export default function Dashboard({ mode, user, onLogout }) {
                 onClick={() => setPage("payments")}
               />
               <Nav
+                label="Billing"
+                icon="▤"
+                active={page === "billing"}
+                onClick={() => setPage("billing")}
+              />
+              <Nav
                 label="Doctor suggestions"
                 icon="✚"
                 active={page === "suggestions"}
@@ -286,16 +295,9 @@ export default function Dashboard({ mode, user, onLogout }) {
               }}
             />
           ) : page === "payments" ? (
-            <Payments
-              patients={patients}
-              onUpdate={(updated) =>
-                setPatients((current) =>
-                  current.map((patient) =>
-                    patient.id === updated.id ? updated : patient,
-                  ),
-                )
-              }
-            />
+            <Payments patients={patients} />
+          ) : page === "billing" ? (
+            <Billing patients={patients} onUpdate={(updated) => setPatients((current) => current.map((patient) => patient.id === updated.id ? updated : patient))} />
           ) : page === "suggestions" ? (
             <Suggestions
               patients={patients}
@@ -449,6 +451,10 @@ function NewPatient({ form, setForm, notice, save, nextId }) {
 
         <Block n="04" title="Payment transaction">
           <div className="grid">
+            <label className="wide">
+              <span>Billing for <b>*</b></span>
+              <input required value={form.serviceDescription} onChange={(e) => setForm({ ...form, serviceDescription: e.target.value })} placeholder="e.g. CT scan, blood test, initial consultation" />
+            </label>
             <label>
               <span>Billing amount <b>*</b></span>
               <input type="number" min="1" step="1" required value={form.billingAmount} onChange={(e) => setForm({ ...form, billingAmount: e.target.value })} placeholder="Enter total bill" />
@@ -562,433 +568,141 @@ function Search({ query, setQuery, patients, loading, onSelect }) {
   )
 }
 
-function Payments({ patients, onUpdate }) {
+function Payments({ patients }) {
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(null)
-  const [selectedTransaction, setSelectedTransaction] = useState(null)
-  const [expandedHistoryGroup, setExpandedHistoryGroup] = useState(null)
-  const [billingDraft, setBillingDraft] = useState("")
-  const [billingNotice, setBillingNotice] = useState("")
-  const [savingBilling, setSavingBilling] = useState(false)
-  const [transaction, setTransaction] = useState({
-    method: "Card",
-    status: "Paid",
-    id: "",
-    amount: "",
-    note: "",
-  })
-  const [notice, setNotice] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-
   const matches = patients.filter((patient) =>
-    `${patient.name} ${patient.id} ${patient.contact}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
+    `${patient.name} ${patient.id} ${patient.contact}`.toLowerCase().includes(query.toLowerCase()),
   )
-  const totalPaid = (selected?.paymentHistory || []).reduce(
-    (sum, item) => sum + Number(item.amount || 0),
-    0,
-  )
-  const hasPendingAmount = Number(selected?.pendingAmount || 0) > 0
-  useEffect(() => {
-    setBillingDraft(selected?.billingAmount || "")
-    setBillingNotice("")
-  }, [selected?.id])
-  const groupedHistory = useMemo(() => {
-    const groups = new Map()
-    for (const item of selected?.paymentHistory || []) {
-      const note = (item.note || "").trim()
-      const key = note ? note.toLocaleLowerCase() : `transaction-${item.recordId || item.id}`
-      if (!groups.has(key)) groups.set(key, { key, title: note || "Patient visit", transactions: [] })
-      groups.get(key).transactions.push(item)
-    }
-    return Array.from(groups.values())
-  }, [selected])
-
-  const saveTransaction = async (event) => {
-    event.preventDefault()
-    if ((!selectedTransaction || transaction.amount !== "") && Number(transaction.amount) <= 0) {
-      return setNotice("Enter a pay amount greater than zero.")
-    }
-    setSubmitting(true)
-    setNotice("")
-    try {
-      const res = selectedTransaction
-        ? await paymentApi.updateTransaction(
-            selected.id,
-            selectedTransaction.recordId,
-            { ...transaction, payAmount: Number(transaction.amount || 0) },
-          )
-        : await paymentApi.addPayment(selected.id, { ...transaction, amount: Number(transaction.amount) })
-      onUpdate(res.patient)
-      setSelected(res.patient)
-      setSelectedTransaction(null)
-      setExpandedHistoryGroup(null)
-      setTransaction({ method: "Card", status: "Paid", id: "", amount: "", note: "" })
-      setNotice(
-        selectedTransaction
-          ? "Transaction updated successfully."
-          : "Visit payment added successfully.",
-      )
-    } catch (err) {
-      setNotice(err.message || "Failed to record visit payment.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const saveBillingAmount = async (event) => {
-    event.preventDefault()
-    setSavingBilling(true)
-    setBillingNotice("")
-    try {
-      const res = await patientApi.updateBillingAmount(selected.id, Number(billingDraft))
-      onUpdate(res.patient)
-      setSelected(res.patient)
-      setBillingDraft(res.patient.billingAmount)
-      setBillingNotice("Billing amount updated successfully.")
-    } catch (err) {
-      setBillingNotice(err.message || "Failed to update billing amount.")
-    } finally {
-      setSavingBilling(false)
-    }
-  }
-
-  const editTransaction = (item) => {
-    setSelectedTransaction(item)
-    setTransaction({
-      method: item.method || "Card",
-      status: item.status || "Pending",
-      id: item.id || "",
-      amount: "",
-      note: item.note || "",
-    })
-    setNotice("")
-  }
-
-  const cancelEdit = () => {
-    setSelectedTransaction(null)
-    setTransaction({ method: "Card", status: "Paid", id: "", amount: "", note: "" })
-    setNotice("")
-  }
-
   return (
     <>
-      <Heading
-        eyebrow="Payments"
-        title="Payment transaction history"
-        text="Find a patient to record a new visit payment and review their full transaction history."
-      />
-      <div className="payment-search">
-        <span>⌕</span>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by patient name, ID, or phone number..."
-        />
-      </div>
-
+      <Heading eyebrow="Payments" title="Payment transaction history" text="Review payment receipts recorded against patient bills." />
+      <div className="payment-search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by patient name, ID, or phone number..." /></div>
       {!selected ? (
         <div className="payment-patient-list">
-          {matches.map((patient) => (
-            <button
-              key={patient.id}
-              onClick={() => {
-                setSelected(patient)
-                setSelectedTransaction(null)
-                setExpandedHistoryGroup(null)
-                setTransaction({
-                  method: "Card",
-                  status: "Paid",
-                  id: "",
-                  amount: "",
-                  note: "",
-                })
-                setNotice("")
-              }}
-            >
-              <i>
-                {patient.name
-                  .split(" ")
-                  .filter(Boolean)
-                  .map((n) => n[0])
-                  .join("")}
-              </i>
-              <div>
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                >
-                  <strong>{patient.name}</strong>
-                  <span className="patient-id-pill" title="Unique Patient ID">
-                    {patient.id}
-                  </span>
-                </div>
-                <span>{patient.contact}</span>
-                <div className="billing-summary patient-list-billing">
-                  <span>Billing <strong>₹{Number(patient.billingAmount || 0).toLocaleString("en-IN")}</strong></span>
-                  <span>Paid <strong>₹{(Number(patient.billingAmount || 0) - Number(patient.pendingAmount || 0)).toLocaleString("en-IN")}</strong></span>
-                  <span>Pending <strong>₹{Number(patient.pendingAmount || 0).toLocaleString("en-IN")}</strong></span>
-                </div>
-              </div>
-              <em
-                className={(patient.paymentStatus || "pending").toLowerCase()}
-              >
-                {patient.paymentStatus || "Pending"}
-              </em>
-              <b>Open payment history →</b>
-            </button>
-          ))}
-          {!matches.length && (
-            <div className="empty">No patient records match that search.</div>
-          )}
+          {matches.map((patient) => <button key={patient.id} onClick={() => setSelected(patient)}>
+            <i>{patient.name.split(" ").filter(Boolean).map((n) => n[0]).join("")}</i>
+            <div><strong>{patient.name}</strong><span>{patient.id} · {patient.contact}</span></div>
+            <b>View transaction history →</b>
+          </button>)}
+          {!matches.length && <div className="empty">No patient records match that search.</div>}
         </div>
       ) : (
-        <div className="payment-workspace">
-          <button
-            className="back"
-            onClick={() => {
-              setSelected(null)
-              setSelectedTransaction(null)
-              setExpandedHistoryGroup(null)
-              setTransaction({
-                method: "Card",
-                status: "Paid",
-                id: "",
-                amount: "",
-                note: "",
-              })
-              setNotice("")
-            }}
-          >
-            ← Search another patient
-          </button>
-          <div className="payment-patient-header">
-            <div className="detail-avatar">
-              {selected.name
-                .split(" ")
-                .filter(Boolean)
-                .map((n) => n[0])
-                .join("")}
-            </div>
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  marginBottom: "4px",
-                }}
-              >
-                <span className="hero-id-badge">
-                  PATIENT ID: <b>{selected.id}</b>
-                </span>
-              </div>
-              <div className="patient-name-status">
-                <h2>{selected.name}</h2>
-                <em className={(selected.paymentStatus || "pending").toLowerCase()}>
-                  ● {selected.paymentStatus || "Pending"}
-                </em>
-              </div>
-              <span>
-                {selected.contact} · {selected.disease}
-              </span>
-              <div className="billing-summary">
-                <span>Billing <strong>₹{Number(selected.billingAmount || 0).toLocaleString("en-IN")}</strong></span>
-                <span>Paid <strong>₹{totalPaid.toLocaleString("en-IN")}</strong></span>
-                <span>Pending <strong>₹{Number(selected.pendingAmount || 0).toLocaleString("en-IN")}</strong></span>
-              </div>
-            </div>
+        <section className="history-card payments-history-only">
+          <button className="back" onClick={() => setSelected(null)}>← All patients</button>
+          <div className="card-heading"><div><h2>{selected.name}</h2><p>{selected.id} · {selected.contact}</p></div><span>{(selected.paymentHistory || []).length} transactions</span></div>
+          <div className="history-table">
+            {(selected.paymentHistory || []).map((item, idx) => <div className="history-row payment-history-row" key={`${item.recordId || item.id}-${idx}`}>
+              <div><strong>{item.id || "Payment receipt"}</strong><span>{item.note || "Patient bill payment"}</span></div>
+              <small>{item.date}</small><small>{item.method}</small>
+              <small className="history-amount">₹{Number(item.amount || 0).toLocaleString("en-IN")}</small>
+              <em className={(item.status || "Paid").toLowerCase()}>{item.status || "Paid"}</em>
+            </div>)}
+            {!(selected.paymentHistory || []).length && <div className="empty">No payment transactions recorded for this patient.</div>}
           </div>
-
-          <form className="billing-update-form" onSubmit={saveBillingAmount}>
-            <div>
-              <strong>Update billing amount</strong>
-              <span>Must be at least the amount already paid (₹{totalPaid.toLocaleString("en-IN")}).</span>
-            </div>
-            <label>
-              Total billing amount
-              <input
-                type="number"
-                min={Math.max(totalPaid, 1)}
-                step="1"
-                value={billingDraft}
-                onChange={(e) => setBillingDraft(e.target.value)}
-                required
-              />
-            </label>
-            <button type="submit" disabled={savingBilling || Number(billingDraft) === Number(selected.billingAmount)}>
-              {savingBilling ? "Saving billing..." : "Update billing"}
-            </button>
-            {billingNotice && <p className={billingNotice.includes("successfully") ? "ok" : "warning"}>{billingNotice}</p>}
-          </form>
-
-          <div className="payment-columns">
-            <section className="history-card">
-              <div className="card-heading">
-                <div>
-                  <h2>Transaction history</h2>
-                  <p>Every payment recorded for this patient.</p>
-                </div>
-                <span>{(selected.paymentHistory || []).length} transactions</span>
-              </div>
-              <div className="history-table">
-                {groupedHistory.map((group) => {
-                  const isExpanded = expandedHistoryGroup === group.key
-                  const groupPaid = group.transactions.reduce((sum, item) => sum + Number(item.amount || 0), 0)
-                  return (
-                    <section className="history-group" key={group.key}>
-                      <button
-                        type="button"
-                        className="history-group-summary"
-                        aria-expanded={isExpanded}
-                        onClick={() => setExpandedHistoryGroup(isExpanded ? null : group.key)}
-                      >
-                        <span>
-                          <strong>{group.title}</strong>
-                          <small>{group.transactions.length} transaction{group.transactions.length === 1 ? "" : "s"} · Paid ₹{groupPaid.toLocaleString("en-IN")}</small>
-                        </span>
-                        <small>{group.transactions[0]?.date}</small>
-                        <b>{isExpanded ? "Hide transactions ↑" : "View transactions →"}</b>
-                      </button>
-                      {isExpanded && group.transactions.map((item, idx) => (
-                        <button
-                          type="button"
-                          className={`history-row ${selectedTransaction?.recordId === item.recordId ? "selected" : ""}`}
-                          key={`${item.recordId || item.id}-${idx}`}
-                          onClick={() => editTransaction(item)}
-                        >
-                          <div>
-                            <strong>{item.id}</strong>
-                            <span>{item.note || "Patient visit"}</span>
-                          </div>
-                          <small>{item.date}</small>
-                          <small>{item.method}</small>
-                          <small className="history-amount">Paid ₹{Number(item.amount || 0).toLocaleString("en-IN")}</small>
-                          <em className={Number(item.amount || 0) > 0 ? "paid" : "pending"}>
-                            {Number(item.amount || 0) > 0 ? "Paid" : "Pending"}
-                          </em>
-                          <small className="history-edit-hint">Select to edit</small>
-                        </button>
-                      ))}
-                    </section>
-                  )
-                })}
-                {!(selected.paymentHistory || []).length && (
-                  <div className="empty">No payments logged yet.</div>
-                )}
-              </div>
-            </section>
-
-            <section className="visit-payment-card">
-              <div className="card-heading">
-                <div>
-                  <h2>
-                    {selectedTransaction
-                      ? "Edit visit payment"
-                      : "Add visit payment"}
-                  </h2>
-                  <p>
-                    {selectedTransaction
-                      ? "Review the payment details or record an additional payment."
-                      : "Record a new transaction for this patient visit."}
-                  </p>
-                </div>
-              </div>
-              <form onSubmit={saveTransaction}>
-                <label>
-                  Amount paid so far
-                  <input
-                    type="text"
-                    value={`₹${totalPaid.toLocaleString("en-IN")}`}
-                    readOnly
-                  />
-                </label>
-                <label>
-                  Pay amount
-                  <input
-                    type={hasPendingAmount ? "number" : "text"}
-                    min="1"
-                    max={hasPendingAmount ? Number(selected.pendingAmount) : undefined}
-                    step="1"
-                    value={hasPendingAmount ? transaction.amount : "No due"}
-                    readOnly={!hasPendingAmount}
-                    onClick={() => {
-                      if (!hasPendingAmount) setNotice("No due.")
-                    }}
-                    onChange={(e) => setTransaction({ ...transaction, amount: e.target.value })}
-                    placeholder={hasPendingAmount ? "Enter amount to pay" : "No due"}
-                    required={!selectedTransaction && hasPendingAmount}
-                  />
-                </label>
-                <label>
-                  Payment method
-                  <select
-                    value={transaction.method}
-                    onChange={(e) =>
-                      setTransaction({ ...transaction, method: e.target.value })
-                    }
-                  >
-                    <option>Card</option>
-                    <option>Cash</option>
-                    <option>UPI</option>
-                    <option>Insurance</option>
-                  </select>
-                </label>
-                <label>
-                  Transaction / receipt ID
-                  <input
-                    value={transaction.id}
-                    onChange={(e) =>
-                      setTransaction({ ...transaction, id: e.target.value })
-                    }
-                    placeholder="Optional receipt ID"
-                  />
-                </label>
-                <label className="full">
-                  Visit note <span>Optional</span>
-                  <textarea
-                    value={transaction.note}
-                    onChange={(e) =>
-                      setTransaction({ ...transaction, note: e.target.value })
-                    }
-                    placeholder="e.g. Follow-up consultation"
-                  />
-                </label>
-                {notice && (
-                  <p
-                    className={
-                      notice.includes("successfully") ||
-                      notice.includes("added")
-                        ? "ok"
-                        : "warning"
-                    }
-                  >
-                    {notice}
-                  </p>
-                )}
-                {selectedTransaction && (
-                  <button
-                    type="button"
-                    className="cancel-edit"
-                    onClick={cancelEdit}
-                  >
-                    Cancel editing
-                  </button>
-                )}
-                <button disabled={submitting || (!hasPendingAmount && !selectedTransaction)}>
-                  {submitting
-                    ? "Saving transaction..."
-                    : selectedTransaction
-                      ? "Save changes"
-                      : "Add transaction"}
-                </button>
-              </form>
-            </section>
-          </div>
-        </div>
+        </section>
       )}
     </>
   )
+}
+
+function Billing({ patients, onUpdate }) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+  const [bills, setBills] = useState([])
+  const [query, setQuery] = useState("")
+  const [selected, setSelected] = useState(null)
+  const emptyForm = { description: "", amount: "", date: today, status: "Pending" }
+  const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState(null)
+  const [notice, setNotice] = useState("")
+  const [busyId, setBusyId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const refresh = async () => {
+    try { const result = await billingApi.getBills(); setBills(result.bills || []) }
+    catch (err) { setNotice(err.message || "Could not load billing records.") }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { refresh() }, [])
+  const visiblePatients = patients.filter((patient) => `${patient.name} ${patient.id} ${patient.contact}`.toLowerCase().includes(query.toLowerCase()))
+  const patientBills = selected ? bills.filter((bill) => bill.patientId === selected.id) : []
+  const pendingTotal = patientBills.filter((bill) => bill.status === "Pending").reduce((sum, bill) => sum + Number(bill.amount), 0)
+  const paidTotal = patientBills.filter((bill) => bill.status === "Paid").reduce((sum, bill) => sum + Number(bill.amount), 0)
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setNotice("") }
+  const submitBill = async (event) => {
+    event.preventDefault(); setNotice("")
+    if (!selected) return
+    try {
+      if (editingId) {
+        const result = await billingApi.updateBill(editingId, form)
+        setBills((current) => current.map((bill) => bill.id === editingId ? { ...bill, ...result.bill } : bill))
+        setNotice("Bill updated successfully.")
+      } else {
+        const result = await billingApi.createBill({ ...form, patientId: selected.id })
+        setBills((current) => [{ ...result.bill, patientName: selected.name, contact: selected.contact }, ...current])
+        setNotice("Bill created successfully.")
+      }
+      const refreshed = await patientApi.getPatient(selected.id)
+      if (refreshed.patient) onUpdate(refreshed.patient)
+      setForm(emptyForm); setEditingId(null)
+    } catch (err) { setNotice(err.message || "Could not create bill.") }
+  }
+  const changeStatus = async (bill) => {
+    setBusyId(bill.id); setNotice("")
+    try {
+      const result = await billingApi.updateStatus(bill.id, bill.status === "Paid" ? "Pending" : "Paid")
+      setBills((current) => current.map((item) => item.id === bill.id ? { ...item, ...result.bill, patientName: item.patientName, contact: item.contact } : item))
+      const refreshed = await patientApi.getPatient(bill.patientId)
+      if (refreshed.patient) onUpdate(refreshed.patient)
+      setNotice(result.bill.status === "Paid" ? "Bill marked paid and payment transaction recorded." : "Bill marked pending; the payment is retained as reversed in history.")
+    } catch (err) { setNotice(err.message || "Could not update bill status.") }
+    finally { setBusyId(null) }
+  }
+  const editBill = (bill) => {
+    if (bill.status !== "Pending") return
+    setEditingId(bill.id)
+    setForm({ description: bill.description, amount: bill.amount, date: bill.date, status: "Pending" })
+    setNotice("")
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+  return <>
+    <Heading eyebrow="Billing" title={selected ? `Billing · ${selected.name}` : "Hospital billing"} text={selected ? `Itemized bills for ${selected.id}.` : "Choose a patient to review and update their bills."} />
+    {!selected ? <>
+      <div className="payment-search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by patient name, ID, or phone number..." /></div>
+      <div className="payment-patient-list billing-patient-list">
+        {visiblePatients.map((patient) => {
+          const ownBills = bills.filter((bill) => bill.patientId === patient.id)
+          const due = ownBills.filter((bill) => bill.status === "Pending").reduce((sum, bill) => sum + Number(bill.amount), 0)
+          const paid = ownBills.filter((bill) => bill.status === "Paid").reduce((sum, bill) => sum + Number(bill.amount), 0)
+          return <button key={patient.id} onClick={() => { setSelected(patient); resetForm() }}>
+            <i>{patient.name.split(" ").filter(Boolean).map((n) => n[0]).join("")}</i>
+            <div><strong>{patient.name}</strong><span>{patient.id} · {patient.contact}</span><div className="billing-summary"><span>Paid <strong>₹{paid.toLocaleString("en-IN")}</strong></span><span>Due <strong>₹{due.toLocaleString("en-IN")}</strong></span></div></div>
+            <em className={due > 0 ? "pending" : "paid"}>{due > 0 ? "Pending" : "Clear"}</em><b>Open billing →</b>
+          </button>
+        })}
+        {!visiblePatients.length && <div className="empty">No patient records match that search.</div>}
+      </div>
+    </> : <>
+      <button className="back" onClick={() => { setSelected(null); resetForm() }}>← All patients</button>
+      <div className="billing-metrics"><div><span>Pending amount</span><strong>₹{pendingTotal.toLocaleString("en-IN")}</strong></div><div><span>Paid amount</span><strong>₹{paidTotal.toLocaleString("en-IN")}</strong></div><div><span>Invoices</span><strong>{patientBills.length}</strong></div></div>
+      <form className="billing-create" onSubmit={submitBill}>
+        <div className="card-heading"><div><h2>{editingId ? "Update bill" : "Create a bill"}</h2><p>Record a service such as a CT scan or blood test for {selected.name}.</p></div></div>
+        <div className="billing-form-grid billing-patient-form-grid">
+          <label>Service / description<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="CT scan, blood test..." /></label>
+          <label>Amount (₹)<input required type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
+          <label>Billing date<input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
+          {!editingId && <label>Payment status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option>Pending</option><option>Paid</option></select></label>}
+        </div>
+        {notice && <p className={notice.includes("successfully") || notice.includes("recorded") ? "ok" : "warning"}>{notice}</p>}
+        <div className="billing-form-actions"><button className="billing-submit" type="submit">{editingId ? "Save bill changes" : "Create bill"}</button>{editingId && <button className="bill-action" type="button" onClick={resetForm}>Cancel edit</button>}</div>
+      </form>
+      <div className="billing-list-heading"><div><h2>Patient bills</h2><p>Invoices, payment status, and available updates for this patient.</p></div></div>
+      <section className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Service</th><th>Date</th><th>Amount</th><th>Status</th><th>Invoice PDF</th><th>Update</th></tr></thead><tbody>
+        {patientBills.map((bill) => <tr key={bill.id}><td>{bill.description}</td><td>{new Date(`${bill.date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td><td>₹{Number(bill.amount).toLocaleString("en-IN")}</td><td><span className={`billing-status ${bill.status.toLowerCase()}`}>{bill.status}</span></td><td><button className="bill-action" onClick={() => downloadBillPdf({ ...bill, patientName: selected.name, contact: selected.contact })} type="button">Download PDF</button></td><td className="billing-row-actions"><button className="bill-action" type="button" disabled={bill.status === "Paid" || busyId === bill.id} onClick={() => editBill(bill)}>Edit</button><button className="bill-action" disabled={busyId === bill.id} onClick={() => changeStatus(bill)} type="button">{busyId === bill.id ? "Saving..." : bill.status === "Paid" ? "Mark pending" : "Mark paid"}</button></td></tr>)}
+        {!loading && !patientBills.length && <tr><td colSpan="6" className="billing-empty">No bills yet. Create the first bill above.</td></tr>}
+        {loading && <tr><td colSpan="6" className="billing-empty">Loading billing records…</td></tr>}
+      </tbody></table></section>
+    </>}
+  </>
 }
 
 function Suggestions({ patients, onUpdate }) {

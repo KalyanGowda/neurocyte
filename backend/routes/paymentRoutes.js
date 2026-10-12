@@ -18,8 +18,8 @@ const PATIENT_SELECT_SQL = `
     p.emergency_contact AS "emergencyContact",
     p.payment_method AS "payment",
     p.billing_amount::text AS "billingAmount",
-    GREATEST(p.billing_amount - COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id), 0), 0)::text AS "pendingAmount",
-    CASE WHEN p.billing_amount <= COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id), 0) THEN 'Paid' ELSE 'Pending' END AS "paymentStatus",
+    GREATEST(p.billing_amount - COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0), 0)::text AS "pendingAmount",
+    CASE WHEN p.billing_amount <= COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0) THEN 'Paid' ELSE 'Pending' END AS "paymentStatus",
     COALESCE(p.transaction_id, '') AS "transaction",
     COALESCE(p.report_name, '') AS "report",
     COALESCE(p.report_url, '') AS "reportUrl",
@@ -77,7 +77,7 @@ router.post("/:id/payments", authenticate, async (req, res) => {
     )
     if (!patientRes.rows.length) return res.status(404).json({ error: "Patient record not found." })
     const paidRes = await query(
-      "SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1",
+      "SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1 AND status = 'Paid'",
       [patientId],
     )
     const remaining = Number(patientRes.rows[0].billing_amount) - Number(paidRes.rows[0].paid)
@@ -172,7 +172,7 @@ router.patch(
       if (!patientRes.rows.length) return res.status(404).json({ error: "Patient record not found." })
       const txRes = await query("SELECT amount, transaction_id FROM payment_transactions WHERE patient_id = $1 AND id = $2", [patientId, transactionRecordId])
       if (!txRes.rows.length) return res.status(404).json({ error: "Transaction record not found for this patient." })
-      const paidRes = await query("SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1", [patientId])
+      const paidRes = await query("SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE patient_id = $1 AND status = 'Paid'", [patientId])
       const remaining = Number(patientRes.rows[0].billing_amount) - Number(paidRes.rows[0].paid)
       if (Number(payAmount) > remaining) {
         return res.status(400).json({ error: `Payment exceeds the remaining balance of ₹${Math.max(remaining, 0).toLocaleString("en-IN")}.` })

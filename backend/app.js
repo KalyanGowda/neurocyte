@@ -7,6 +7,7 @@ import patientRoutes from "./routes/patientRoutes.js"
 import paymentRoutes from "./routes/paymentRoutes.js"
 import suggestionRoutes from "./routes/suggestionRoutes.js"
 import statsRoutes from "./routes/statsRoutes.js"
+import billingRoutes from "./routes/billingRoutes.js"
 
 const app = express()
 
@@ -35,6 +36,7 @@ app.use("/api/patients", patientRoutes)
 app.use("/api/patients", paymentRoutes)
 app.use("/api/patients", suggestionRoutes)
 app.use("/api/stats", statsRoutes)
+app.use("/api/billing", billingRoutes)
 
 // 404 handler for API routes
 app.use("/api", (req, res) => {

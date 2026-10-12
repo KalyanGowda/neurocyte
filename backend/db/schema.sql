@@ -81,3 +81,50 @@ CREATE TABLE IF NOT EXISTS doctor_suggestions (
 -- Doctor Suggestions Indexes
 CREATE INDEX IF NOT EXISTS idx_suggestions_patient_id ON doctor_suggestions (patient_id);
 CREATE INDEX IF NOT EXISTS idx_suggestions_created_at ON doctor_suggestions (created_at DESC);
+
+-- Itemized hospital bills. Existing patient balances are copied into this
+-- table once so they remain visible after billing moves out of patient totals.
+CREATE TABLE IF NOT EXISTS billing_items (
+  id SERIAL PRIMARY KEY,
+  patient_id VARCHAR(50) NOT NULL REFERENCES patients (id) ON DELETE CASCADE,
+  description VARCHAR(200) NOT NULL,
+  amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+  billing_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Paid')),
+  paid_transaction_id INTEGER REFERENCES payment_transactions (id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_billing_items_patient_id ON billing_items (patient_id);
+CREATE INDEX IF NOT EXISTS idx_billing_items_status ON billing_items (status);
+
+-- Link transactions created by a bill, keeping reversals auditable.
+ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS billing_item_id INTEGER REFERENCES billing_items (id) ON DELETE SET NULL;
+
+-- Older records used Pending to describe the overall balance even when a
+-- partial payment was actually received. Treat those positive amounts as paid.
+UPDATE payment_transactions SET status = 'Paid' WHERE status = 'Pending' AND amount > 0;
+
+INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
+SELECT p.id, 'Existing patient balance', p.billing_amount,
+       p.created_at::date,
+       CASE WHEN COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0) >= p.billing_amount THEN 'Paid' ELSE 'Pending' END
+FROM patients p
+WHERE p.billing_amount > 0
+  AND NOT EXISTS (SELECT 1 FROM billing_items bi WHERE bi.patient_id = p.id);
+
+UPDATE payment_transactions pt
+SET billing_item_id = bi.id
+FROM billing_items bi
+WHERE bi.patient_id = pt.patient_id
+  AND bi.description = 'Existing patient balance'
+  AND pt.billing_item_id IS NULL;
+
+UPDATE billing_items bi
+SET paid_transaction_id = (
+  SELECT pt.id FROM payment_transactions pt
+  WHERE pt.billing_item_id = bi.id AND pt.status = 'Paid'
+  ORDER BY pt.created_at DESC LIMIT 1
+)
+WHERE bi.description = 'Existing patient balance' AND bi.paid_transaction_id IS NULL;

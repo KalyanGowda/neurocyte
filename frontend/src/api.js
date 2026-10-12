@@ -128,18 +128,6 @@ export const patientApi = {
       body: JSON.stringify(patientData),
     }),
 
-  updatePaymentStatus: (id, paymentStatus) =>
-    apiRequest(`/patients/${id}/payment-status`, {
-      method: "PATCH",
-      body: JSON.stringify({ paymentStatus }),
-    }),
-
-  updateBillingAmount: (id, billingAmount) =>
-    apiRequest(`/patients/${id}/billing-amount`, {
-      method: "PATCH",
-      body: JSON.stringify({ billingAmount }),
-    }),
-
   uploadReport: (id, file) => {
     const formData = new FormData()
     formData.append("report", file)
@@ -150,24 +138,11 @@ export const patientApi = {
   },
 }
 
-export const paymentApi = {
-  addPayment: (patientId, paymentData) =>
-    apiRequest(`/patients/${patientId}/payments`, {
-      method: "POST",
-      body: JSON.stringify(paymentData),
-    }),
-
-  updateTransaction: (patientId, transactionRecordId, transaction) =>
-    apiRequest(
-      `/patients/${patientId}/payments/${transactionRecordId}/status`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(transaction),
-      },
-    ),
-
-  getPaymentHistory: (patientId) =>
-    apiRequest(`/patients/${patientId}/payments`),
+export const billingApi = {
+  getBills: () => apiRequest("/billing"),
+  createBill: (bill) => apiRequest("/billing", { method: "POST", body: JSON.stringify(bill) }),
+  updateBill: (id, bill) => apiRequest(`/billing/${id}`, { method: "PATCH", body: JSON.stringify(bill) }),
+  updateStatus: (id, status) => apiRequest(`/billing/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
 }
 
 export const suggestionApi = {
