@@ -178,8 +178,8 @@ export async function initDatabase() {
     // adding dated demo entries. This also covers a brand-new seeded database,
     // where the schema migration ran before the sample patients were created.
     await query(
-      `INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
-       SELECT p.id, 'Existing patient balance', p.billing_amount, p.created_at::date,
+      `INSERT INTO billing_items (patient_id, description, quantity, unit_price, amount, billing_date, status)
+       SELECT p.id, 'Existing patient balance', 1, p.billing_amount, p.billing_amount, p.created_at::date,
               CASE WHEN COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0) >= p.billing_amount THEN 'Paid' ELSE 'Pending' END
        FROM patients p
        WHERE p.billing_amount > 0
@@ -214,8 +214,8 @@ export async function initDatabase() {
       try {
         await client.query("BEGIN")
         const created = await client.query(
-          `INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
-           VALUES ($1, $2, $3, $4, 'Pending') RETURNING id`,
+          `INSERT INTO billing_items (patient_id, description, quantity, unit_price, amount, billing_date, status)
+           VALUES ($1, $2, 1, $3, $3, $4, 'Pending') RETURNING id`,
           [sample.patientId, sample.description, sample.amount, sample.date],
         )
         if (sample.status === "Paid") {

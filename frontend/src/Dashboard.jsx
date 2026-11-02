@@ -613,7 +613,7 @@ function Billing({ patients, onUpdate }) {
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(null)
   const [selectedDate, setSelectedDate] = useState("")
-  const emptyForm = { description: "", amount: "", date: today, status: "Pending" }
+  const emptyForm = { description: "", referredBy: "", quantity: "1", unitPrice: "0", amount: "", date: today, status: "Pending" }
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
   const [notice, setNotice] = useState("")
@@ -677,7 +677,7 @@ function Billing({ patients, onUpdate }) {
   const editBill = (bill) => {
     if (bill.status !== "Pending") return
     setEditingId(bill.id)
-    setForm({ description: bill.description, amount: bill.amount, date: bill.date, status: "Pending" })
+    setForm({ description: bill.description, referredBy: bill.referredBy || "", quantity: String(bill.quantity || 1), unitPrice: String(bill.unitPrice ?? bill.amount), amount: bill.amount, date: bill.date, status: "Pending" })
     setNotice("")
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
@@ -705,6 +705,9 @@ function Billing({ patients, onUpdate }) {
         <div className="card-heading"><div><h2>{editingId ? "Update bill" : "Create a bill"}</h2><p>Record a service such as a CT scan or blood test for {selected.name}.</p></div></div>
         <div className="billing-form-grid billing-patient-form-grid">
           <label>Service / description<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="CT scan, blood test..." /></label>
+          <label>Referred by<input value={form.referredBy} onChange={(e) => setForm({ ...form, referredBy: e.target.value })} placeholder="Enter name (optional)" /></label>
+          <label>Qty<input required type="number" min="1" step="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></label>
+          <label>Unit price (₹)<input required type="number" min="0" step="0.01" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} /></label>
           <label>Amount (₹)<input required type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
           <label>Billing date<input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
           {!editingId && <label>Payment status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option>Pending</option><option>Paid</option></select></label>}
@@ -733,8 +736,8 @@ function Billing({ patients, onUpdate }) {
               <div><span>Billing date</span><h3>{formattedDate}</h3><small>Invoice ID · {invoiceId}</small></div>
               <div className="billing-day-totals"><span>Paid <strong>₹{day.paid.toLocaleString("en-IN")}</strong></span><span>Pending <strong>₹{day.pending.toLocaleString("en-IN")}</strong></span><em className={`billing-status ${dayStatus.toLowerCase()}`}>{dayStatus}</em><button className="billing-submit" type="button" onClick={() => downloadDailyReceiptPdf({ patient: selected, date: day.date, bills: day.bills })}>Download PDF</button></div>
             </div>
-            <section className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Service</th><th>Amount</th><th>Status</th><th>Update</th></tr></thead><tbody>
-              {day.bills.map((bill) => <tr key={bill.id}><td>{bill.description}</td><td>₹{Number(bill.amount).toLocaleString("en-IN")}</td><td><span className={`billing-status ${bill.status.toLowerCase()}`}>{bill.status}</span></td><td className="billing-row-actions"><button className="bill-action" type="button" disabled={bill.status === "Paid" || busyId === bill.id} onClick={() => editBill(bill)}>Edit</button><button className="bill-action" disabled={busyId === bill.id} onClick={() => changeStatus(bill)} type="button">{busyId === bill.id ? "Saving..." : bill.status === "Paid" ? "Mark pending" : "Mark paid"}</button></td></tr>)}
+            <section className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Service</th><th>Referred by</th><th>Qty</th><th>Unit price</th><th>Amount</th><th>Status</th><th>Update</th></tr></thead><tbody>
+              {day.bills.map((bill) => <tr key={bill.id}><td>{bill.description}</td><td>{bill.referredBy || "—"}</td><td>{bill.quantity || 1}</td><td>₹{Number(bill.unitPrice ?? bill.amount).toLocaleString("en-IN")}</td><td>₹{Number(bill.amount).toLocaleString("en-IN")}</td><td><span className={`billing-status ${bill.status.toLowerCase()}`}>{bill.status}</span></td><td className="billing-row-actions"><button className="bill-action" type="button" disabled={bill.status === "Paid" || busyId === bill.id} onClick={() => editBill(bill)}>Edit</button><button className="bill-action" disabled={busyId === bill.id} onClick={() => changeStatus(bill)} type="button">{busyId === bill.id ? "Saving..." : bill.status === "Paid" ? "Mark pending" : "Mark paid"}</button></td></tr>)}
             </tbody></table></section>
           </section>
         })()}

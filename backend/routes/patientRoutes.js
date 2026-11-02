@@ -267,8 +267,8 @@ router.post("/", authenticate, async (req, res) => {
 
     const billingDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
     const billRes = await query(
-      `INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      `INSERT INTO billing_items (patient_id, description, quantity, unit_price, amount, billing_date, status)
+       VALUES ($1, $2, 1, $3, $3, $4, $5) RETURNING id`,
       [patientId, serviceDescription.trim(), Number(billingAmount), billingDate, paymentStatus],
     )
 

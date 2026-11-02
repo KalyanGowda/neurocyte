@@ -111,6 +111,9 @@ CREATE TABLE IF NOT EXISTS billing_items (
   id SERIAL PRIMARY KEY,
   patient_id VARCHAR(50) NOT NULL REFERENCES patients (id) ON DELETE CASCADE,
   description VARCHAR(200) NOT NULL,
+  referred_by VARCHAR(200),
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_price NUMERIC(12, 2),
   amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
   billing_date DATE NOT NULL DEFAULT CURRENT_DATE,
   status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Paid')),
@@ -118,6 +121,13 @@ CREATE TABLE IF NOT EXISTS billing_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE billing_items ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE billing_items ADD COLUMN IF NOT EXISTS referred_by VARCHAR(200);
+ALTER TABLE billing_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12, 2);
+UPDATE billing_items SET unit_price = amount WHERE unit_price IS NULL;
+ALTER TABLE billing_items ALTER COLUMN unit_price SET DEFAULT 0;
+ALTER TABLE billing_items ALTER COLUMN unit_price SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_billing_items_patient_id ON billing_items (patient_id);
 CREATE INDEX IF NOT EXISTS idx_billing_items_status ON billing_items (status);
@@ -129,8 +139,8 @@ ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS billing_item_id INTEGE
 -- partial payment was actually received. Treat those positive amounts as paid.
 UPDATE payment_transactions SET status = 'Paid' WHERE status = 'Pending' AND amount > 0;
 
-INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
-SELECT p.id, 'Existing patient balance', p.billing_amount,
+INSERT INTO billing_items (patient_id, description, quantity, unit_price, amount, billing_date, status)
+SELECT p.id, 'Existing patient balance', 1, p.billing_amount, p.billing_amount,
        p.created_at::date,
        CASE WHEN COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0) >= p.billing_amount THEN 'Paid' ELSE 'Pending' END
 FROM patients p

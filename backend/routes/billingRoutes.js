@@ -11,6 +11,8 @@ router.get("/", async (_req, res) => {
   try {
     const result = await query(
       `SELECT bi.id, bi.patient_id AS "patientId", bi.description,
+              bi.referred_by AS "referredBy",
+              bi.quantity, bi.unit_price::text AS "unitPrice",
               bi.amount::text AS amount, bi.billing_date::text AS date,
               bi.status, p.name AS "patientName", p.contact,
               p.disease, bi.paid_transaction_id AS "paidTransactionId"
@@ -26,9 +28,9 @@ router.get("/", async (_req, res) => {
 })
 
 router.post("/", async (req, res) => {
-  const { patientId, description, amount, date, status = "Pending" } = req.body
-  if (!patientId || typeof description !== "string" || !description.trim() || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
-    return res.status(400).json({ error: "Choose a patient, describe the service, and enter an amount greater than zero." })
+  const { patientId, description, referredBy = "", quantity, unitPrice, amount, date, status = "Pending" } = req.body
+  if (!patientId || typeof description !== "string" || !description.trim() || !Number.isInteger(Number(quantity)) || Number(quantity) <= 0 || !Number.isFinite(Number(unitPrice)) || Number(unitPrice) < 0 || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    return res.status(400).json({ error: "Choose a patient, describe the service, and enter a valid quantity, unit price, and amount." })
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || !["Pending", "Paid"].includes(status)) {
     return res.status(400).json({ error: "Enter a valid billing date and status." })
@@ -43,9 +45,9 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ error: "Patient record not found." })
     }
     const created = await client.query(
-      `INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
-       VALUES ($1, $2, $3, $4, 'Pending') RETURNING id`,
-      [patientId, description.trim(), Number(amount), date],
+      `INSERT INTO billing_items (patient_id, description, referred_by, quantity, unit_price, amount, billing_date, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Pending') RETURNING id`,
+      [patientId, description.trim(), String(referredBy).trim() || null, Number(quantity), Number(unitPrice), Number(amount), date],
     )
     const billId = created.rows[0].id
     let transactionId = null
@@ -69,7 +71,7 @@ router.post("/", async (req, res) => {
     const paymentStatus = Number(paidTotal.rows[0].total) >= Number(billedTotal.rows[0].billing_amount) ? "Paid" : "Pending"
     await client.query("UPDATE patients SET payment_status = $1 WHERE id = $2", [paymentStatus, patientId])
     await client.query("COMMIT")
-    res.status(201).json({ bill: { id: billId, patientId, description: description.trim(), amount: String(amount), date, status, paidTransactionId: transactionId } })
+    res.status(201).json({ bill: { id: billId, patientId, description: description.trim(), referredBy: String(referredBy).trim(), quantity: Number(quantity), unitPrice: String(unitPrice), amount: String(amount), date, status, paidTransactionId: transactionId } })
   } catch (err) {
     await client.query("ROLLBACK")
     console.error("Create billing item error:", err)
@@ -80,9 +82,9 @@ router.post("/", async (req, res) => {
 })
 
 router.patch("/:id", async (req, res) => {
-  const { description, amount, date } = req.body
-  if (typeof description !== "string" || !description.trim() || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date || "")) {
-    return res.status(400).json({ error: "Enter a service description, valid date, and amount greater than zero." })
+  const { description, referredBy = "", quantity, unitPrice, amount, date } = req.body
+  if (typeof description !== "string" || !description.trim() || !Number.isInteger(Number(quantity)) || Number(quantity) <= 0 || !Number.isFinite(Number(unitPrice)) || Number(unitPrice) < 0 || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date || "")) {
+    return res.status(400).json({ error: "Enter a service description, valid quantity, unit price, amount, and date." })
   }
   const client = await pool.connect()
   try {
@@ -110,11 +112,11 @@ router.patch("/:id", async (req, res) => {
       return res.status(400).json({ error: "Bill amount cannot be lower than payments already received." })
     }
     const result = await client.query(
-      `UPDATE billing_items SET description = $1, amount = $2, billing_date = $3, updated_at = NOW()
-       WHERE id = $4
-       RETURNING id, patient_id AS "patientId", description, amount::text AS amount,
+      `UPDATE billing_items SET description = $1, referred_by = $2, quantity = $3, unit_price = $4, amount = $5, billing_date = $6, updated_at = NOW()
+       WHERE id = $7
+       RETURNING id, patient_id AS "patientId", description, referred_by AS "referredBy", quantity, unit_price::text AS "unitPrice", amount::text AS amount,
        billing_date::text AS date, status, paid_transaction_id AS "paidTransactionId"`,
-      [description.trim(), Number(amount), date, current.id],
+      [description.trim(), String(referredBy).trim() || null, Number(quantity), Number(unitPrice), Number(amount), date, current.id],
     )
     await client.query(
       "UPDATE patients SET billing_amount = billing_amount + $1, updated_at = NOW() WHERE id = $2",
