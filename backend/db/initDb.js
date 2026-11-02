@@ -174,6 +174,84 @@ export async function initDatabase() {
       "UPDATE patients SET billing_amount = FLOOR(RANDOM() * 40001 + 10000) WHERE billing_amount = 0",
     )
 
+    // Preserve the startup-created patient balance as an itemized bill before
+    // adding dated demo entries. This also covers a brand-new seeded database,
+    // where the schema migration ran before the sample patients were created.
+    await query(
+      `INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
+       SELECT p.id, 'Existing patient balance', p.billing_amount, p.created_at::date,
+              CASE WHEN COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0) >= p.billing_amount THEN 'Paid' ELSE 'Pending' END
+       FROM patients p
+       WHERE p.billing_amount > 0
+         AND NOT EXISTS (SELECT 1 FROM billing_items bi WHERE bi.patient_id = p.id)`,
+    )
+
+    const sampleBills = [
+      { patientId: "PT-2048", patientEmail: "maya@email.com", description: "Neurology consultation", amount: 1800, date: "2026-10-02", status: "Paid" },
+      { patientId: "PT-2048", patientEmail: "maya@email.com", description: "Blood panel", amount: 1250, date: "2026-10-02", status: "Pending" },
+      { patientId: "PT-2048", patientEmail: "maya@email.com", description: "MRI review", amount: 4200, date: "2026-10-08", status: "Pending" },
+      { patientId: "PT-2047", patientEmail: "arjun@email.com", description: "Blood pressure follow-up", amount: 900, date: "2026-10-03", status: "Paid" },
+      { patientId: "PT-2047", patientEmail: "arjun@email.com", description: "Blood chemistry test", amount: 1450, date: "2026-10-03", status: "Pending" },
+      { patientId: "PT-2047", patientEmail: "arjun@email.com", description: "ECG review", amount: 700, date: "2026-10-11", status: "Pending" },
+    ]
+
+    const demoPatientIds = new Set()
+    for (const sample of sampleBills) {
+      const patientExists = await query(
+        "SELECT 1 FROM patients WHERE id = $1 AND LOWER(email) = $2",
+        [sample.patientId, sample.patientEmail],
+      )
+      if (!patientExists.rows.length) continue
+      demoPatientIds.add(sample.patientId)
+      const existing = await query(
+        `SELECT id FROM billing_items
+         WHERE patient_id = $1 AND description = $2 AND billing_date = $3`,
+        [sample.patientId, sample.description, sample.date],
+      )
+      if (existing.rows.length) continue
+
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        const created = await client.query(
+          `INSERT INTO billing_items (patient_id, description, amount, billing_date, status)
+           VALUES ($1, $2, $3, $4, 'Pending') RETURNING id`,
+          [sample.patientId, sample.description, sample.amount, sample.date],
+        )
+        if (sample.status === "Paid") {
+          const transaction = await client.query(
+            `INSERT INTO payment_transactions (patient_id, transaction_id, method, status, amount, note, payment_date, billing_item_id)
+             VALUES ($1, $2, 'Card', 'Paid', $3, $4, to_char($5::date, 'DD Mon YYYY'), $6) RETURNING id`,
+            [sample.patientId, `DEMO-${sample.patientId}-${sample.date.replaceAll("-", "")}`, sample.amount, sample.description, sample.date, created.rows[0].id],
+          )
+          await client.query(
+            "UPDATE billing_items SET status = 'Paid', paid_transaction_id = $1 WHERE id = $2",
+            [transaction.rows[0].id, created.rows[0].id],
+          )
+        }
+        await client.query(
+          "UPDATE patients SET billing_amount = billing_amount + $1, updated_at = NOW() WHERE id = $2",
+          [sample.amount, sample.patientId],
+        )
+        await client.query("COMMIT")
+      } catch (err) {
+        await client.query("ROLLBACK")
+        throw err
+      } finally {
+        client.release()
+      }
+    }
+
+    await query(
+      `UPDATE patients p
+       SET payment_status = CASE
+         WHEN COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt WHERE pt.patient_id = p.id AND pt.status = 'Paid'), 0) >= p.billing_amount THEN 'Paid'
+         ELSE 'Pending'
+       END
+       WHERE p.id = ANY($1::text[])`,
+      [[...demoPatientIds]],
+    )
+
     // Ensure all existing patient records have a valid, unique Patient ID
     const unassignedPatients = await query(
       "SELECT ctid, id, name FROM patients WHERE id IS NULL OR id = '' OR id NOT LIKE 'PT-%'",

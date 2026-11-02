@@ -48,6 +48,29 @@ CREATE INDEX IF NOT EXISTS idx_patients_contact ON patients (contact);
 CREATE INDEX IF NOT EXISTS idx_patients_payment_status ON patients (payment_status);
 CREATE INDEX IF NOT EXISTS idx_patients_created_at ON patients (created_at DESC);
 
+-- Keep every clinical report upload instead of replacing the patient's last file.
+CREATE TABLE IF NOT EXISTS patient_reports (
+  id SERIAL PRIMARY KEY,
+  patient_id VARCHAR(50) NOT NULL REFERENCES patients (id) ON DELETE CASCADE,
+  report_name VARCHAR(255) NOT NULL,
+  report_url VARCHAR(500) NOT NULL,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_patient_reports_patient_uploaded
+  ON patient_reports (patient_id, uploaded_at DESC);
+
+-- Preserve reports stored in the legacy single-report columns during migration.
+INSERT INTO patient_reports (patient_id, report_name, report_url, uploaded_at)
+SELECT p.id, p.report_name, p.report_url, COALESCE(p.updated_at, p.created_at)
+FROM patients p
+WHERE COALESCE(BTRIM(p.report_name), '') <> ''
+  AND COALESCE(BTRIM(p.report_url), '') <> ''
+  AND NOT EXISTS (
+    SELECT 1 FROM patient_reports pr
+    WHERE pr.patient_id = p.id AND pr.report_url = p.report_url
+  );
+
 -- Payment Transactions Table
 CREATE TABLE IF NOT EXISTS payment_transactions (
   id SERIAL PRIMARY KEY,

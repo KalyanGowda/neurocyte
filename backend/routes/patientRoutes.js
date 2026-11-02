@@ -137,6 +137,29 @@ router.get("/:id", authenticate, async (req, res) => {
   }
 })
 
+// GET /api/patients/:id/reports (all clinical reports, newest date first)
+router.get("/:id/reports", authenticate, async (req, res) => {
+  try {
+    const patient = await query("SELECT id FROM patients WHERE id = $1", [req.params.id])
+    if (!patient.rows.length) {
+      return res.status(404).json({ error: "Patient record not found." })
+    }
+    const result = await query(
+      `SELECT id, report_name AS name, report_url AS url,
+              to_char(uploaded_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS date,
+              to_char(uploaded_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI AM') AS "uploadedAt"
+       FROM patient_reports
+       WHERE patient_id = $1
+       ORDER BY uploaded_at DESC, id DESC`,
+      [req.params.id],
+    )
+    res.json({ reports: result.rows })
+  } catch (err) {
+    console.error("Fetch patient reports error:", err)
+    res.status(500).json({ error: "Failed to retrieve clinical reports." })
+  }
+})
+
 // POST /api/patients (Register new patient with auto-incremented, non-repeating Patient ID)
 router.post("/", authenticate, async (req, res) => {
   try {
@@ -358,7 +381,7 @@ router.patch("/:id/payment-status", authenticate, async (req, res) => {
   }
 })
 
-// POST /api/patients/:id/report (Attach/Replace medical report file)
+// POST /api/patients/:id/report (Add a clinical report without replacing history)
 router.post(
   "/:id/report",
   authenticate,
@@ -373,6 +396,20 @@ router.post(
 
       const reportName = req.file.originalname
       const reportUrl = `/uploads/${req.file.filename}`
+
+      const patientExists = await query("SELECT id FROM patients WHERE id = $1", [id])
+      if (!patientExists.rows.length) {
+        return res.status(404).json({ error: "Patient record not found." })
+      }
+
+      const savedReport = await query(
+        `INSERT INTO patient_reports (patient_id, report_name, report_url)
+         VALUES ($1, $2, $3)
+         RETURNING id, report_name AS name, report_url AS url,
+                   to_char(uploaded_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS date,
+                   to_char(uploaded_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI AM') AS "uploadedAt"`,
+        [id, reportName, reportUrl],
+      )
 
       await query(
         `UPDATE patients
@@ -391,7 +428,7 @@ router.post(
       res.json({
         message: "Report uploaded successfully.",
         patient: updatedRes.rows[0],
-        file: { name: reportName, url: reportUrl },
+        report: savedReport.rows[0],
       })
     } catch (err) {
       console.error("Upload report error:", err)

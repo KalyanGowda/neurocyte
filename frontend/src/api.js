@@ -122,6 +122,8 @@ export const patientApi = {
 
   getPatient: (id) => apiRequest(`/patients/${id}`),
 
+  getReports: (id) => apiRequest(`/patients/${id}/reports`),
+
   createPatient: (patientData) =>
     apiRequest("/patients", {
       method: "POST",

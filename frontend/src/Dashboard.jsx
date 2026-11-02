@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { patientApi, billingApi, suggestionApi, adminApi } from "./api"
-import { downloadBillPdf } from "./billingPdf"
+import { downloadDailyReceiptPdf, getDailyInvoiceId } from "./billingPdf"
 
 const blank = () => ({
   name: "",
@@ -592,9 +592,10 @@ function Payments({ patients }) {
           <button className="back" onClick={() => setSelected(null)}>← All patients</button>
           <div className="card-heading"><div><h2>{selected.name}</h2><p>{selected.id} · {selected.contact}</p></div><span>{(selected.paymentHistory || []).length} transactions</span></div>
           <div className="history-table">
+            <div className="payment-history-header"><span>Receipt / note</span><span>Date</span><span>Amount</span><span>Status</span></div>
             {(selected.paymentHistory || []).map((item, idx) => <div className="history-row payment-history-row" key={`${item.recordId || item.id}-${idx}`}>
               <div><strong>{item.id || "Payment receipt"}</strong><span>{item.note || "Patient bill payment"}</span></div>
-              <small>{item.date}</small><small>{item.method}</small>
+              <small className="payment-history-date">{item.date}</small>
               <small className="history-amount">₹{Number(item.amount || 0).toLocaleString("en-IN")}</small>
               <em className={(item.status || "Paid").toLowerCase()}>{item.status || "Paid"}</em>
             </div>)}
@@ -611,6 +612,7 @@ function Billing({ patients, onUpdate }) {
   const [bills, setBills] = useState([])
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(null)
+  const [selectedDate, setSelectedDate] = useState("")
   const emptyForm = { description: "", amount: "", date: today, status: "Pending" }
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
@@ -627,6 +629,19 @@ function Billing({ patients, onUpdate }) {
   const patientBills = selected ? bills.filter((bill) => bill.patientId === selected.id) : []
   const pendingTotal = patientBills.filter((bill) => bill.status === "Pending").reduce((sum, bill) => sum + Number(bill.amount), 0)
   const paidTotal = patientBills.filter((bill) => bill.status === "Paid").reduce((sum, bill) => sum + Number(bill.amount), 0)
+  const dailyGroups = Object.values(patientBills.reduce((groups, bill) => {
+    const day = groups[bill.date] || (groups[bill.date] = { date: bill.date, bills: [], paid: 0, pending: 0 })
+    day.bills.push(bill)
+    if (bill.status === "Paid") day.paid += Number(bill.amount)
+    else day.pending += Number(bill.amount)
+    return groups
+  }, {})).sort((a, b) => b.date.localeCompare(a.date))
+  const activeDay = dailyGroups.find((day) => day.date === selectedDate) || dailyGroups[0]
+  useEffect(() => {
+    if (dailyGroups.length && !dailyGroups.some((day) => day.date === selectedDate)) {
+      setSelectedDate(dailyGroups[0].date)
+    }
+  }, [dailyGroups, selectedDate])
   const resetForm = () => { setForm(emptyForm); setEditingId(null); setNotice("") }
   const submitBill = async (event) => {
     event.preventDefault(); setNotice("")
@@ -635,10 +650,12 @@ function Billing({ patients, onUpdate }) {
       if (editingId) {
         const result = await billingApi.updateBill(editingId, form)
         setBills((current) => current.map((bill) => bill.id === editingId ? { ...bill, ...result.bill } : bill))
+        setSelectedDate(form.date)
         setNotice("Bill updated successfully.")
       } else {
         const result = await billingApi.createBill({ ...form, patientId: selected.id })
         setBills((current) => [{ ...result.bill, patientName: selected.name, contact: selected.contact }, ...current])
+        setSelectedDate(form.date)
         setNotice("Bill created successfully.")
       }
       const refreshed = await patientApi.getPatient(selected.id)
@@ -673,7 +690,7 @@ function Billing({ patients, onUpdate }) {
           const ownBills = bills.filter((bill) => bill.patientId === patient.id)
           const due = ownBills.filter((bill) => bill.status === "Pending").reduce((sum, bill) => sum + Number(bill.amount), 0)
           const paid = ownBills.filter((bill) => bill.status === "Paid").reduce((sum, bill) => sum + Number(bill.amount), 0)
-          return <button key={patient.id} onClick={() => { setSelected(patient); resetForm() }}>
+          return <button key={patient.id} onClick={() => { setSelected(patient); setSelectedDate(""); resetForm() }}>
             <i>{patient.name.split(" ").filter(Boolean).map((n) => n[0]).join("")}</i>
             <div><strong>{patient.name}</strong><span>{patient.id} · {patient.contact}</span><div className="billing-summary"><span>Paid <strong>₹{paid.toLocaleString("en-IN")}</strong></span><span>Due <strong>₹{due.toLocaleString("en-IN")}</strong></span></div></div>
             <em className={due > 0 ? "pending" : "paid"}>{due > 0 ? "Pending" : "Clear"}</em><b>Open billing →</b>
@@ -683,7 +700,7 @@ function Billing({ patients, onUpdate }) {
       </div>
     </> : <>
       <button className="back" onClick={() => { setSelected(null); resetForm() }}>← All patients</button>
-      <div className="billing-metrics"><div><span>Pending amount</span><strong>₹{pendingTotal.toLocaleString("en-IN")}</strong></div><div><span>Paid amount</span><strong>₹{paidTotal.toLocaleString("en-IN")}</strong></div><div><span>Invoices</span><strong>{patientBills.length}</strong></div></div>
+      <div className="billing-metrics"><div><span>Pending amount</span><strong>₹{pendingTotal.toLocaleString("en-IN")}</strong></div><div><span>Paid amount</span><strong>₹{paidTotal.toLocaleString("en-IN")}</strong></div><div><span>Billing days</span><strong>{dailyGroups.length}</strong></div></div>
       <form className="billing-create" onSubmit={submitBill}>
         <div className="card-heading"><div><h2>{editingId ? "Update bill" : "Create a bill"}</h2><p>Record a service such as a CT scan or blood test for {selected.name}.</p></div></div>
         <div className="billing-form-grid billing-patient-form-grid">
@@ -695,12 +712,33 @@ function Billing({ patients, onUpdate }) {
         {notice && <p className={notice.includes("successfully") || notice.includes("recorded") ? "ok" : "warning"}>{notice}</p>}
         <div className="billing-form-actions"><button className="billing-submit" type="submit">{editingId ? "Save bill changes" : "Create bill"}</button>{editingId && <button className="bill-action" type="button" onClick={resetForm}>Cancel edit</button>}</div>
       </form>
-      <div className="billing-list-heading"><div><h2>Patient bills</h2><p>Invoices, payment status, and available updates for this patient.</p></div></div>
-      <section className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Service</th><th>Date</th><th>Amount</th><th>Status</th><th>Invoice PDF</th><th>Update</th></tr></thead><tbody>
-        {patientBills.map((bill) => <tr key={bill.id}><td>{bill.description}</td><td>{new Date(`${bill.date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td><td>₹{Number(bill.amount).toLocaleString("en-IN")}</td><td><span className={`billing-status ${bill.status.toLowerCase()}`}>{bill.status}</span></td><td><button className="bill-action" onClick={() => downloadBillPdf({ ...bill, patientName: selected.name, contact: selected.contact })} type="button">Download PDF</button></td><td className="billing-row-actions"><button className="bill-action" type="button" disabled={bill.status === "Paid" || busyId === bill.id} onClick={() => editBill(bill)}>Edit</button><button className="bill-action" disabled={busyId === bill.id} onClick={() => changeStatus(bill)} type="button">{busyId === bill.id ? "Saving..." : bill.status === "Paid" ? "Mark pending" : "Mark paid"}</button></td></tr>)}
-        {!loading && !patientBills.length && <tr><td colSpan="6" className="billing-empty">No bills yet. Create the first bill above.</td></tr>}
-        {loading && <tr><td colSpan="6" className="billing-empty">Loading billing records…</td></tr>}
-      </tbody></table></section>
+      <div className="billing-list-heading"><div><h2>Billing by date</h2><p>Select a date to see that day’s services under one invoice.</p></div></div>
+      {loading ? <section className="billing-table-wrap"><div className="billing-empty">Loading billing records…</div></section> : dailyGroups.length ? <>
+        <nav className="billing-date-nav" aria-label="Billing dates">
+          {dailyGroups.map((day) => {
+            const dayStatus = day.pending > 0 ? "Pending" : "Paid"
+            const dayLabel = new Date(`${day.date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })
+            return <button className={activeDay?.date === day.date ? "active" : ""} key={day.date} type="button" onClick={() => setSelectedDate(day.date)} aria-pressed={activeDay?.date === day.date}>
+              <strong>{dayLabel}</strong><small>{day.bills.length} {day.bills.length === 1 ? "bill" : "bills"}</small><em className={`billing-status ${dayStatus.toLowerCase()}`}>{dayStatus}</em>
+            </button>
+          })}
+        </nav>
+        {activeDay && (() => {
+          const day = activeDay
+          const dayStatus = day.pending > 0 ? "Pending" : "Paid"
+          const invoiceId = getDailyInvoiceId(selected.id, day.date)
+          const formattedDate = new Date(`${day.date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })
+          return <section className="billing-day-card" key={day.date}>
+            <div className="billing-day-heading">
+              <div><span>Billing date</span><h3>{formattedDate}</h3><small>Invoice ID · {invoiceId}</small></div>
+              <div className="billing-day-totals"><span>Paid <strong>₹{day.paid.toLocaleString("en-IN")}</strong></span><span>Pending <strong>₹{day.pending.toLocaleString("en-IN")}</strong></span><em className={`billing-status ${dayStatus.toLowerCase()}`}>{dayStatus}</em><button className="billing-submit" type="button" onClick={() => downloadDailyReceiptPdf({ patient: selected, date: day.date, bills: day.bills })}>Download PDF</button></div>
+            </div>
+            <section className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Service</th><th>Amount</th><th>Status</th><th>Update</th></tr></thead><tbody>
+              {day.bills.map((bill) => <tr key={bill.id}><td>{bill.description}</td><td>₹{Number(bill.amount).toLocaleString("en-IN")}</td><td><span className={`billing-status ${bill.status.toLowerCase()}`}>{bill.status}</span></td><td className="billing-row-actions"><button className="bill-action" type="button" disabled={bill.status === "Paid" || busyId === bill.id} onClick={() => editBill(bill)}>Edit</button><button className="bill-action" disabled={busyId === bill.id} onClick={() => changeStatus(bill)} type="button">{busyId === bill.id ? "Saving..." : bill.status === "Paid" ? "Mark pending" : "Mark paid"}</button></td></tr>)}
+            </tbody></table></section>
+          </section>
+        })()}
+      </> : <section className="billing-table-wrap"><div className="billing-empty">No bills yet. Create the first bill above.</div></section>}
     </>}
   </>
 }
@@ -983,25 +1021,60 @@ function Admin() {
 function PatientDetails({ patient, onBack, onUpdate }) {
   const [message, setMessage] = useState("")
   const [uploading, setUploading] = useState(false)
+  const [reports, setReports] = useState([])
+  const [reportsLoading, setReportsLoading] = useState(true)
+  const [previewReport, setPreviewReport] = useState(null)
+  const reportFrame = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setReportsLoading(true)
+    patientApi.getReports(patient.id)
+      .then((result) => {
+        if (!cancelled) setReports(result.reports || [])
+      })
+      .catch((err) => {
+        if (!cancelled) setMessage(err.message || "Could not load clinical reports.")
+      })
+      .finally(() => {
+        if (!cancelled) setReportsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [patient.id])
 
   const updateReport = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+    const input = event.target
+    const files = Array.from(input.files || [])
+    if (!files.length) return
 
     setUploading(true)
     setMessage("")
+    let uploaded = 0
     try {
-      const res = await patientApi.uploadReport(patient.id, file)
-      if (res.patient) {
-        onUpdate(res.patient)
-        setMessage("Report uploaded successfully.")
+      for (const file of files) {
+        const res = await patientApi.uploadReport(patient.id, file)
+        if (res.report) {
+          setReports((current) => [res.report, ...current])
+          uploaded += 1
+        }
+        if (res.patient) onUpdate(res.patient)
       }
+      setMessage(`${uploaded} clinical report${uploaded === 1 ? "" : "s"} uploaded successfully.`)
     } catch (err) {
-      setMessage(err.message || "Failed to upload report file.")
+      setMessage(uploaded ? `${uploaded} report${uploaded === 1 ? "" : "s"} uploaded. ${err.message}` : err.message || "Failed to upload report file.")
     } finally {
       setUploading(false)
+      input.value = ""
     }
   }
+
+  const reportsByDate = reports.reduce((groups, report) => {
+    const date = report.date || "Undated"
+    ;(groups[date] ||= []).push(report)
+    return groups
+  }, {})
+  const reportDates = Object.keys(reportsByDate).sort((a, b) => b.localeCompare(a))
+  const canPreviewReport = (report) => /\.(pdf|png|jpe?g|txt)$/i.test(report.name || "")
 
   return (
     <>
@@ -1072,34 +1145,26 @@ function PatientDetails({ patient, onBack, onUpdate }) {
           <div className="card-heading">
             <div>
               <h2>Clinical reports</h2>
-              <p>Upload a report to this patient record in PostgreSQL.</p>
+              <p>Reports are saved separately and grouped by their upload date.</p>
             </div>
-            <span>Optional</span>
+            <span>{reports.length} saved</span>
           </div>
-          {patient.report ? (
-            <div className="report-file">
-              {patient.reportUrl ? (
-                <a
-                  href={patient.reportUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="report-link"
-                >
-                  {patient.report}
-                </a>
-              ) : (
-                <span>{patient.report}</span>
-              )}
-              <small>Open attachment</small>
-            </div>
-          ) : (
-            <div className="no-report">
-              No clinical report has been attached.
-            </div>
-          )}
+          {reportsLoading ? <div className="no-report">Loading clinical reports…</div> : reportDates.length ? <div className="report-date-list">
+            {reportDates.map((date) => <section className="report-date-group" key={date}>
+              <h3>{date === "Undated" ? date : new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}</h3>
+              {reportsByDate[date].map((report) => <article className="report-entry" key={report.id || report.url}>
+                <div className="report-entry-info"><strong>{report.name}</strong><small>{report.uploadedAt || "Clinical report"}</small></div>
+                <div className="report-entry-actions">
+                  {canPreviewReport(report) ? <button className="bill-action" type="button" onClick={() => setPreviewReport(report)}>View / print</button> : <a className="bill-action" href={report.url} target="_blank" rel="noreferrer">Open file</a>}
+                  <a className="bill-action" href={report.url} download={report.name}>Download</a>
+                </div>
+              </article>)}
+            </section>)}
+          </div> : <div className="no-report">No clinical reports have been attached.</div>}
           <label className="clear-upload">
             <input
               type="file"
+              multiple
               accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
               onChange={updateReport}
               disabled={uploading}
@@ -1107,20 +1172,24 @@ function PatientDetails({ patient, onBack, onUpdate }) {
             <span className="upload-icon">↑</span>
             <strong>
               {uploading
-                ? "Uploading to server..."
-                : patient.report
-                  ? "Replace clinical report"
-                  : "Upload clinical report"}
+                ? "Uploading reports..."
+                : "Add clinical reports"}
             </strong>
-            <small>Choose PDF, image, or document (saved to server)</small>
+            <small>Select one or more PDF, image, or document files. Existing reports are kept.</small>
           </label>
           {message && (
-            <p className={message.includes("success") ? "ok" : "warning"}>
+            <p className={message.includes("successfully") ? "ok" : "warning"}>
               {message}
             </p>
           )}
         </section>
       </div>
+      {previewReport && <div className="report-preview-backdrop" onClick={() => setPreviewReport(null)}>
+        <section className="report-preview" role="dialog" aria-modal="true" aria-label={`Report preview: ${previewReport.name}`} onClick={(event) => event.stopPropagation()}>
+          <header><div><strong>{previewReport.name}</strong><small>{previewReport.uploadedAt}</small></div><div className="report-preview-actions"><a className="bill-action" href={previewReport.url} download={previewReport.name}>Download</a><button className="bill-action" type="button" onClick={() => reportFrame.current?.contentWindow?.print()}>Print</button><button className="bill-action" type="button" onClick={() => setPreviewReport(null)}>Close</button></div></header>
+          <iframe ref={reportFrame} title={`Preview of ${previewReport.name}`} src={previewReport.url} />
+        </section>
+      </div>}
     </>
   )
 }
