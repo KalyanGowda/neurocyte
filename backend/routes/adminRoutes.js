@@ -1,11 +1,11 @@
 import express from "express"
 import { query } from "../config/db.js"
-import { authenticate, requireAdmin } from "../middleware/auth.js"
+import { authenticate, requireAuthorizedStaff, requireAdmin } from "../middleware/auth.js"
 
 const router = express.Router()
 
 // Apply auth & admin check to all admin routes
-router.use(authenticate, requireAdmin)
+router.use(authenticate, requireAuthorizedStaff, requireAdmin)
 
 // GET /api/admin/pending-staff
 router.get("/pending-staff", async (req, res) => {

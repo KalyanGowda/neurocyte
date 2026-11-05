@@ -3,10 +3,9 @@ import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { query } from "../config/db.js"
 import { authenticate } from "../middleware/auth.js"
+import { JWT_SECRET } from "../config/security.js"
 
 const router = express.Router()
-const JWT_SECRET =
-  process.env.JWT_SECRET || "neurocyte_clinical_jwt_secret_key_2026_secure"
 
 // Helper to sign JWT
 const createToken = (user) => {
@@ -20,7 +19,7 @@ const createToken = (user) => {
       is_admin: user.is_admin,
     },
     JWT_SECRET,
-    { expiresIn: "7d" },
+    { expiresIn: "8h" },
   )
 }
 
@@ -107,16 +106,11 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password." })
     }
 
-    if (user.status === "pending") {
-      return res.status(403).json({
-        error: "Your registration is awaiting administrator authorization.",
-      })
-    }
-
-    if (user.status === "rejected") {
-      return res
-        .status(403)
-        .json({ error: "Your account access request was declined." })
+    if (user.status !== "authorized") {
+      if (user.status === "pending") {
+        return res.status(403).json({ error: "Your registration is awaiting administrator authorization." })
+      }
+      return res.status(403).json({ error: "This account is not authorized to sign in." })
     }
 
     const token = createToken(user)
@@ -166,6 +160,9 @@ router.post("/admin-login", async (req, res) => {
     }
 
     const adminUser = result.rows[0]
+    if (adminUser.status !== "authorized") {
+      return res.status(403).json({ error: "This administrator account is not authorized." })
+    }
     const isMatch = await bcrypt.compare(password, adminUser.password_hash)
     if (!isMatch) {
       return res
@@ -196,23 +193,7 @@ router.post("/admin-login", async (req, res) => {
 
 // GET /api/auth/me
 router.get("/me", authenticate, async (req, res) => {
-  try {
-    const result = await query(
-      `SELECT id, name, email, role, status, is_admin
-       FROM staff
-       WHERE id = $1`,
-      [req.user.id],
-    )
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "User not found." })
-    }
-
-    res.json({ user: result.rows[0] })
-  } catch (err) {
-    console.error("Auth verify error:", err)
-    res.status(500).json({ error: "Session verification failed." })
-  }
+  res.json({ user: req.user })
 })
 
 export default router

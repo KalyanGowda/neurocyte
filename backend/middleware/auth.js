@@ -1,20 +1,35 @@
 import jwt from "jsonwebtoken"
+import { query } from "../config/db.js"
+import { JWT_SECRET } from "../config/security.js"
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "neurocyte_clinical_jwt_secret_key_2026_secure"
-
-export function authenticate(req, res, next) {
+export async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Access token required." })
   }
 
-  const token = authHeader.split(" ")[1]
   try {
+    const token = authHeader.slice("Bearer ".length).trim()
     const decoded = jwt.verify(token, JWT_SECRET)
-    req.user = decoded
+    const staff = await query(
+      `SELECT id, name, email, role, status, is_admin
+       FROM staff WHERE id = $1`,
+      [decoded.id],
+    )
+
+    // Read current authorization from the database so approval/revocation takes
+    // effect immediately instead of waiting for a long-lived JWT to expire.
+    if (!staff.rows.length || staff.rows[0].status !== "authorized") {
+      return res.status(401).json({ error: "This staff account is not authorized." })
+    }
+
+    req.user = staff.rows[0]
     next()
   } catch (err) {
+    if (err.name !== "JsonWebTokenError" && err.name !== "TokenExpiredError" && err.name !== "NotBeforeError") {
+      console.error("Authentication lookup failed:", err.message)
+      return res.status(503).json({ error: "Authentication service is temporarily unavailable." })
+    }
     return res.status(403).json({ error: "Invalid or expired session token." })
   }
 }

@@ -1,6 +1,5 @@
 import express from "express"
 import { query } from "../config/db.js"
-import { authenticate } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -59,7 +58,7 @@ const PATIENT_SELECT_SQL = `
 `
 
 // POST /api/patients/:id/suggestions (Add dated doctor suggestion)
-router.post("/:id/suggestions", authenticate, async (req, res) => {
+router.post("/:id/suggestions", async (req, res) => {
   try {
     const { id: patientId } = req.params
     const { note } = req.body
@@ -108,7 +107,7 @@ router.post("/:id/suggestions", authenticate, async (req, res) => {
 })
 
 // GET /api/patients/:id/suggestions
-router.get("/:id/suggestions", authenticate, async (req, res) => {
+router.get("/:id/suggestions", async (req, res) => {
   try {
     const { id: patientId } = req.params
     const result = await query(

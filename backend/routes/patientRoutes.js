@@ -1,9 +1,21 @@
 import express from "express"
+import fs from "node:fs/promises"
+import path from "node:path"
 import { query } from "../config/db.js"
-import { authenticate } from "../middleware/auth.js"
 import { upload } from "../middleware/upload.js"
 
 const router = express.Router()
+const uploadsDir = path.resolve(import.meta.dirname, "../uploads")
+
+const ensurePatientExists = async (req, res, next) => {
+  try {
+    const patient = await query("SELECT id FROM patients WHERE id = $1", [req.params.id])
+    if (!patient.rows.length) return res.status(404).json({ error: "Patient record not found." })
+    next()
+  } catch (err) {
+    next(err)
+  }
+}
 
 // SQL snippet to construct the full patient JSON structure in a single query
 const PATIENT_SELECT_SQL = `
@@ -64,7 +76,7 @@ const PATIENT_SELECT_SQL = `
 `
 
 // GET /api/patients?query=... (Search through patient name and patient ID)
-router.get("/", authenticate, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const searchQuery = req.query.query ? req.query.query.trim() : null
 
@@ -95,7 +107,7 @@ router.get("/", authenticate, async (req, res) => {
 })
 
 // GET /api/patients/next-id (Compute next auto-incremented, non-repeating Patient ID)
-router.get("/next-id", authenticate, async (req, res) => {
+router.get("/next-id", async (req, res) => {
   try {
     const maxRes = await query(`
       SELECT COALESCE(
@@ -120,7 +132,7 @@ router.get("/next-id", authenticate, async (req, res) => {
 })
 
 // GET /api/patients/:id
-router.get("/:id", authenticate, async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params
     const sql = `${PATIENT_SELECT_SQL} WHERE p.id = $1`
@@ -138,7 +150,7 @@ router.get("/:id", authenticate, async (req, res) => {
 })
 
 // GET /api/patients/:id/reports (all clinical reports, newest date first)
-router.get("/:id/reports", authenticate, async (req, res) => {
+router.get("/:id/reports", async (req, res) => {
   try {
     const patient = await query("SELECT id FROM patients WHERE id = $1", [req.params.id])
     if (!patient.rows.length) {
@@ -153,15 +165,70 @@ router.get("/:id/reports", authenticate, async (req, res) => {
        ORDER BY uploaded_at DESC, id DESC`,
       [req.params.id],
     )
-    res.json({ reports: result.rows })
+    res.json({ reports: result.rows.map((report) => ({
+      ...report,
+      url: `/api/patients/${encodeURIComponent(req.params.id)}/reports/${report.id}/file`,
+    })) })
   } catch (err) {
     console.error("Fetch patient reports error:", err)
     res.status(500).json({ error: "Failed to retrieve clinical reports." })
   }
 })
 
+// Report bytes are only served after staff authorization and patient/report ownership checks.
+router.get("/:id/reports/:reportId/file", async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT report_name, report_url FROM patient_reports
+       WHERE id = $1 AND patient_id = $2`,
+      [req.params.reportId, req.params.id],
+    )
+    if (!result.rows.length) return res.status(404).json({ error: "Clinical report not found." })
+
+    const report = result.rows[0]
+    const storedName = String(report.report_url).split(/[\\/]/).pop()
+    if (!storedName || storedName === "." || storedName === "..") {
+      return res.status(404).json({ error: "Clinical report not found." })
+    }
+    const root = await fs.realpath(uploadsDir)
+    const filePath = await fs.realpath(path.join(root, storedName))
+    if (!filePath.startsWith(`${root}${path.sep}`)) {
+      return res.status(404).json({ error: "Clinical report not found." })
+    }
+    await fs.access(filePath)
+
+    const extension = path.extname(storedName).toLowerCase()
+    const contentTypes = {
+      ".pdf": "application/pdf",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".doc": "application/msword",
+      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ".txt": "text/plain; charset=utf-8",
+    }
+    const previewable = [".pdf", ".png", ".jpg", ".jpeg", ".txt"].includes(extension)
+    const asDownload = req.query.download === "1" || !previewable
+    const safeName = report.report_name
+      .replace(/[\r\n";]/g, "_")
+      .replace(/[^\x20-\x7E]/g, "_")
+
+    res.set({
+      "Content-Type": contentTypes[extension] || "application/octet-stream",
+      "Content-Disposition": `${asDownload ? "attachment" : "inline"}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(report.report_name)}`,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    })
+    res.sendFile(filePath)
+  } catch (err) {
+    if (err.code === "ENOENT") return res.status(404).json({ error: "Clinical report not found." })
+    console.error("Read clinical report error:", err)
+    res.status(500).json({ error: "Failed to retrieve clinical report." })
+  }
+})
+
 // POST /api/patients (Register new patient with auto-incremented, non-repeating Patient ID)
-router.post("/", authenticate, async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const {
       name,
@@ -311,7 +378,7 @@ router.post("/", authenticate, async (req, res) => {
 })
 
 // PATCH /api/patients/:id/billing-amount
-router.patch("/:id/billing-amount", authenticate, async (req, res) => {
+router.patch("/:id/billing-amount", async (req, res) => {
   try {
     const { id } = req.params
     const { billingAmount } = req.body
@@ -349,7 +416,7 @@ router.patch("/:id/billing-amount", authenticate, async (req, res) => {
 })
 
 // PATCH /api/patients/:id/payment-status
-router.patch("/:id/payment-status", authenticate, async (req, res) => {
+router.patch("/:id/payment-status", async (req, res) => {
   try {
     const { id } = req.params
     const { paymentStatus } = req.body
@@ -384,7 +451,7 @@ router.patch("/:id/payment-status", authenticate, async (req, res) => {
 // POST /api/patients/:id/report (Add a clinical report without replacing history)
 router.post(
   "/:id/report",
-  authenticate,
+  ensurePatientExists,
   upload.single("report"),
   async (req, res) => {
     try {
@@ -396,11 +463,6 @@ router.post(
 
       const reportName = req.file.originalname
       const reportUrl = `/uploads/${req.file.filename}`
-
-      const patientExists = await query("SELECT id FROM patients WHERE id = $1", [id])
-      if (!patientExists.rows.length) {
-        return res.status(404).json({ error: "Patient record not found." })
-      }
 
       const savedReport = await query(
         `INSERT INTO patient_reports (patient_id, report_name, report_url)
@@ -425,10 +487,14 @@ router.post(
         return res.status(404).json({ error: "Patient record not found." })
       }
 
+      const report = {
+        ...savedReport.rows[0],
+        url: `/api/patients/${encodeURIComponent(id)}/reports/${savedReport.rows[0].id}/file`,
+      }
       res.json({
         message: "Report uploaded successfully.",
         patient: updatedRes.rows[0],
-        report: savedReport.rows[0],
+        report,
       })
     } catch (err) {
       console.error("Upload report error:", err)

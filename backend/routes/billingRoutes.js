@@ -1,11 +1,11 @@
 import express from "express"
 import { randomUUID } from "node:crypto"
 import { pool, query } from "../config/db.js"
-import { authenticate } from "../middleware/auth.js"
+import { authenticate, requireAuthorizedStaff } from "../middleware/auth.js"
 
 const router = express.Router()
 
-router.use(authenticate)
+router.use(authenticate, requireAuthorizedStaff)
 
 router.get("/", async (_req, res) => {
   try {

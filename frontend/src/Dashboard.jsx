@@ -486,7 +486,7 @@ function NewPatient({ form, setForm, notice, save, nextId }) {
           <label className="upload">
             <input
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt"
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 setForm({
@@ -1030,6 +1030,13 @@ function PatientDetails({ patient, onBack, onUpdate }) {
   const reportFrame = useRef(null)
 
   useEffect(() => {
+    const previewUrl = previewReport?.previewUrl
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewReport?.previewUrl])
+
+  useEffect(() => {
     let cancelled = false
     setReportsLoading(true)
     patientApi.getReports(patient.id)
@@ -1078,6 +1085,28 @@ function PatientDetails({ patient, onBack, onUpdate }) {
   }, {})
   const reportDates = Object.keys(reportsByDate).sort((a, b) => b.localeCompare(a))
   const canPreviewReport = (report) => /\.(pdf|png|jpe?g|txt)$/i.test(report.name || "")
+  const viewReport = async (report) => {
+    try {
+      const previewUrl = await patientApi.getReportObjectUrl(patient.id, report.id)
+      setPreviewReport({ ...report, previewUrl })
+    } catch (err) {
+      setMessage(err.message || "Could not open clinical report.")
+    }
+  }
+  const downloadReport = async (report) => {
+    try {
+      const fileUrl = await patientApi.getReportObjectUrl(patient.id, report.id, true)
+      const link = document.createElement("a")
+      link.href = fileUrl
+      link.download = report.name
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000)
+    } catch (err) {
+      setMessage(err.message || "Could not download clinical report.")
+    }
+  }
 
   return (
     <>
@@ -1158,8 +1187,8 @@ function PatientDetails({ patient, onBack, onUpdate }) {
               {reportsByDate[date].map((report) => <article className="report-entry" key={report.id || report.url}>
                 <div className="report-entry-info"><strong>{report.name}</strong><small>{report.uploadedAt || "Clinical report"}</small></div>
                 <div className="report-entry-actions">
-                  {canPreviewReport(report) ? <button className="bill-action" type="button" onClick={() => setPreviewReport(report)}>View / print</button> : <a className="bill-action" href={report.url} target="_blank" rel="noreferrer">Open file</a>}
-                  <a className="bill-action" href={report.url} download={report.name}>Download</a>
+                  {canPreviewReport(report) && <button className="bill-action" type="button" onClick={() => viewReport(report)}>View / print</button>}
+                  <button className="bill-action" type="button" onClick={() => downloadReport(report)}>Download</button>
                 </div>
               </article>)}
             </section>)}
@@ -1178,7 +1207,7 @@ function PatientDetails({ patient, onBack, onUpdate }) {
                 ? "Uploading reports..."
                 : "Add clinical reports"}
             </strong>
-            <small>Select one or more PDF, image, or document files. Existing reports are kept.</small>
+            <small>Select one or more PDF, image, document, or text files. Existing reports are kept.</small>
           </label>
           {message && (
             <p className={message.includes("successfully") ? "ok" : "warning"}>
@@ -1189,8 +1218,8 @@ function PatientDetails({ patient, onBack, onUpdate }) {
       </div>
       {previewReport && <div className="report-preview-backdrop" onClick={() => setPreviewReport(null)}>
         <section className="report-preview" role="dialog" aria-modal="true" aria-label={`Report preview: ${previewReport.name}`} onClick={(event) => event.stopPropagation()}>
-          <header><div><strong>{previewReport.name}</strong><small>{previewReport.uploadedAt}</small></div><div className="report-preview-actions"><a className="bill-action" href={previewReport.url} download={previewReport.name}>Download</a><button className="bill-action" type="button" onClick={() => reportFrame.current?.contentWindow?.print()}>Print</button><button className="bill-action" type="button" onClick={() => setPreviewReport(null)}>Close</button></div></header>
-          <iframe ref={reportFrame} title={`Preview of ${previewReport.name}`} src={previewReport.url} />
+          <header><div><strong>{previewReport.name}</strong><small>{previewReport.uploadedAt}</small></div><div className="report-preview-actions"><button className="bill-action" type="button" onClick={() => downloadReport(previewReport)}>Download</button><button className="bill-action" type="button" onClick={() => reportFrame.current?.contentWindow?.print()}>Print</button><button className="bill-action" type="button" onClick={() => setPreviewReport(null)}>Close</button></div></header>
+          <iframe ref={reportFrame} title={`Preview of ${previewReport.name}`} src={previewReport.previewUrl} />
         </section>
       </div>}
     </>

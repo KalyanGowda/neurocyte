@@ -1,6 +1,5 @@
 import express from "express"
 import cors from "cors"
-import path from "path"
 import authRoutes from "./routes/authRoutes.js"
 import adminRoutes from "./routes/adminRoutes.js"
 import patientRoutes from "./routes/patientRoutes.js"
@@ -8,17 +7,23 @@ import paymentRoutes from "./routes/paymentRoutes.js"
 import suggestionRoutes from "./routes/suggestionRoutes.js"
 import statsRoutes from "./routes/statsRoutes.js"
 import billingRoutes from "./routes/billingRoutes.js"
+import { authenticate, requireAuthorizedStaff } from "./middleware/auth.js"
 
 const app = express()
 
-// Middleware
-app.use(cors({ origin: true, credentials: true }))
+// Restrict browser API access to explicitly configured frontend origins.
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGINS || "http://localhost:8443,http://127.0.0.1:8443")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+)
+app.use(cors({
+  origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
+  credentials: false,
+}))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-
-// Serve uploaded medical reports statically
-const uploadsDir = path.resolve(import.meta.dirname, "uploads")
-app.use("/uploads", express.static(uploadsDir))
 
 // Healthcheck
 app.get("/api/health", (req, res) => {
@@ -32,6 +37,7 @@ app.get("/api/health", (req, res) => {
 // Route registration
 app.use("/api/auth", authRoutes)
 app.use("/api/admin", adminRoutes)
+app.use("/api/patients", authenticate, requireAuthorizedStaff)
 app.use("/api/patients", patientRoutes)
 app.use("/api/patients", paymentRoutes)
 app.use("/api/patients", suggestionRoutes)

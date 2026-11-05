@@ -1,7 +1,6 @@
 import express from "express"
 import { randomUUID } from "node:crypto"
 import { query } from "../config/db.js"
-import { authenticate } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -63,7 +62,7 @@ const PATIENT_SELECT_SQL = `
 `
 
 // POST /api/patients/:id/payments (Record a new visit payment)
-router.post("/:id/payments", authenticate, async (req, res) => {
+router.post("/:id/payments", async (req, res) => {
   try {
     const { id: patientId } = req.params
     const { method, id: transactionId, note = "", amount } = req.body
@@ -134,7 +133,7 @@ router.post("/:id/payments", authenticate, async (req, res) => {
 })
 
 // GET /api/patients/:id/payments (Retrieve transaction history)
-router.get("/:id/payments", authenticate, async (req, res) => {
+router.get("/:id/payments", async (req, res) => {
   try {
     const { id: patientId } = req.params
     const result = await query(
@@ -153,7 +152,6 @@ router.get("/:id/payments", authenticate, async (req, res) => {
 // PATCH /api/patients/:id/payments/:transactionRecordId/status
 router.patch(
   "/:id/payments/:transactionRecordId/status",
-  authenticate,
   async (req, res) => {
     try {
       const { id: patientId, transactionRecordId } = req.params

@@ -57,6 +57,20 @@ async function apiRequest(endpoint, options = {}) {
   return data
 }
 
+async function getReportObjectUrl(patientId, reportId, download = false) {
+  const token = authStorage.getToken()
+  const query = download ? "?download=1" : ""
+  const response = await fetch(
+    `/api/patients/${encodeURIComponent(patientId)}/reports/${encodeURIComponent(reportId)}/file${query}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.error || `Report request failed (${response.status}).`)
+  }
+  return URL.createObjectURL(await response.blob())
+}
+
 export const statsApi = {
   getStats: () => apiRequest("/stats"),
 }
@@ -123,6 +137,7 @@ export const patientApi = {
   getPatient: (id) => apiRequest(`/patients/${id}`),
 
   getReports: (id) => apiRequest(`/patients/${id}/reports`),
+  getReportObjectUrl,
 
   createPatient: (patientData) =>
     apiRequest("/patients", {

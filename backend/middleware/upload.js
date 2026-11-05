@@ -1,6 +1,7 @@
 import multer from "multer"
 import path from "path"
 import fs from "fs"
+import { randomUUID } from "node:crypto"
 
 const uploadsDir = path.resolve(import.meta.dirname, "../uploads")
 if (!fs.existsSync(uploadsDir)) {
@@ -13,11 +14,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname)
-    const baseName = path
-      .basename(file.originalname, ext)
-      .replace(/[^a-zA-Z0-9_-]/g, "_")
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
-    cb(null, `${baseName}-${uniqueSuffix}${ext}`)
+    cb(null, `${randomUUID()}${ext.toLowerCase()}`)
   },
 })
 
@@ -31,10 +28,12 @@ const fileFilter = (req, file, cb) => {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
   ]
-  if (allowedMime.includes(file.mimetype)) {
+  const allowedExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg", ".doc", ".docx", ".txt"])
+  const extension = path.extname(file.originalname).toLowerCase()
+  if (allowedMime.includes(file.mimetype) && allowedExtensions.has(extension)) {
     cb(null, true)
   } else {
-    cb(new Error("Only PDF, JPG, PNG, DOC, and DOCX files are allowed."))
+    cb(new Error("Only PDF, JPG, PNG, DOC, DOCX, and TXT files are allowed."))
   }
 }
 
